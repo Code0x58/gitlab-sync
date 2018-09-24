@@ -19,5 +19,5 @@ setup(
     setup_requires=["setuptools_scm", "wheel"],
     entry_points={"console_scripts": ["gitlab-tree = gitlab_tree.cli:main"]},
     packages=["gitlab_tree"],
-    python_requires=">=3.6",
+    python_requires=">=3.7",
 )
