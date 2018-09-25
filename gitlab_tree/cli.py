@@ -235,7 +235,7 @@ def _list_group_projects(group):
         f"https://gitlab.com/api/v4/groups/{group}/projects",
         params={"per_page": 100, "page": 1, "simple": True},
     )
-    while response.headers.get("x-next-page"):
+    while response.headers.get("X-Next-Page"):
         projects.extend(response.json())
         response = GITLAB.get(
             f"https://gitlab.com/api/v4/groups/{group}/projects",
@@ -272,29 +272,46 @@ def _list_user_projects(user):
     return {Path(project["path_with_namespace"]): project["id"] for project in projects}
 
 
-def _get_all_projects(group_or_user):
+class NotAGroup(Exception):
+    pass
+
+
+def _get_group_subgroups(group):
     groups = []
-    projects = {}
     response = GITLAB.get(
-        f"https://gitlab.com/api/v4/groups/{group_or_user}/subgroups",
+        f"https://gitlab.com/api/v4/groups/{group}/subgroups",
         params={"per_page": 100, "page": 1},
     )
-    while response.headers.get("x-next-page"):
+    while response.headers.get("X-Next-Page"):
         groups.extend(response.json())
         response = GITLAB.get(
-            f"https://gitlab.com/api/v4/groups/{group_or_user}/subgroups",
+            f"https://gitlab.com/api/v4/groups/{group}/subgroups",
             params={"per_page": 100, "page": response.headers["X-Next-Page"]},
         )
     data = response.json()
-    if "message" in data:
-        # probably a user rather than group
-        projects.update(_list_user_projects(group_or_user))
+    if not isinstance(data, list):
+        raise NotAGroup(data)
+    groups.extend(data)
+    for group in groups:
+        groups.extend(_get_group_subgroups(group["id"]))
+    return groups
+
+
+def _get_all_projects(group_or_user):
+    try:
+        groups = _get_group_subgroups(group_or_user)
+        is_user = False
+    except NotAGroup:
+        groups = []
+        is_user = True
+
+    if is_user:
+        return _list_user_projects(group_or_user)
     else:
-        # group_or_user was a group
-        groups.extend(data)
+        projects = {}
         for group in [group_or_user] + [group["id"] for group in groups]:
             projects.update(_list_group_projects(group))
-    return projects
+        return projects
 
 
 def _get_local_paths():
