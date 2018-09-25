@@ -3,6 +3,7 @@ import itertools
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import click
@@ -188,9 +189,14 @@ def _load_config():
         )
 
     config = toml.load(str(location))
-    if not isinstance(config.get("access-token"), str):
-        raise ValueError("access-token is required and must be a string")
-    ACCESS_TOKEN = config["access-token"]
+    if isinstance(config.get("access-token-command"), list):
+        access_token_command = config["access-token-command"]
+        result = subprocess.run(access_token_command, stdin=sys.stdin, stderr=sys.stderr, stdout=subprocess.PIPE, text=True, check=True)
+        ACCESS_TOKEN = result.stdout.strip()
+    elif isinstance(config.get("access-token"), str):
+        ACCESS_TOKEN = config["access-token"]
+    else:
+        raise ValueError("one of access-token or access-token-command is required and must be a string")
 
     GITLAB = requests.Session()
     GITLAB.headers.update({"Private-Token": ACCESS_TOKEN})

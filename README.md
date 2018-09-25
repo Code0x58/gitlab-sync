@@ -9,8 +9,13 @@ with API access.
 
 config goes in `~/.config/gitlab-tree.toml` or `~/.gitlab-tree.toml`
 ```toml
+# use one of the following (the latter takes precident}
 access-token = "9koXpg98eAheJpvBs5tK"
+access-token-command = ["pass", "GitLab/api-access-token"]
+
+# paths to clone from GitLab, can include slashes for groups/projects
 paths = [ "mintel", "obristow" ]
+
 base-directory = "~/gitlab"
 ```
 
