@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import asyncio
 import itertools
 import os
 import shutil
@@ -9,6 +10,7 @@ from pathlib import Path
 import click
 import requests
 import toml
+from aiohttp import ClientSession
 
 PRIMARY_BRANCH = "master"
 
@@ -227,91 +229,127 @@ LOCAL_ONLY_REPOS = None
 REMOTE_ONLY_REPOS = None
 
 
-# TODO: enumerate groups available to user/API token
-# TODO: walk pages
-def _list_group_projects(group):
-    projects = []
-    response = GITLAB.get(
-        f"https://gitlab.com/api/v4/groups/{group}/projects",
-        params={"per_page": 100, "page": 1, "simple": True},
-    )
-    while response.headers.get("X-Next-Page"):
-        projects.extend(response.json())
-        response = GITLAB.get(
-            f"https://gitlab.com/api/v4/groups/{group}/projects",
-            params={
-                "per_page": 100,
-                "page": response.headers["X-Next-Page"],
-                "simple": True,
-            },
-        )
-    projects.extend(response.json())
-    return {Path(project["path_with_namespace"]): project["id"] for project in projects}
-
-
-def _list_user_projects(user):
-    projects = []
-    response = GITLAB.get(
-        f"https://gitlab.com/api/v4/users/{user}/projects",
-        params={"per_page": 100, "page": 1, "simple": True},
-    )
-    while response.headers.get("x-next-page"):
-        projects.extend(response.json())
-        response = GITLAB.get(
-            f"https://gitlab.com/api/v4/users/{user}/projects",
-            params={
-                "per_page": 100,
-                "page": response.headers["C-Next-Page"],
-                "simple": True,
-            },
-        )
-    data = response.json()
-    if "message" in data:
-        raise ValueError(f"Unable to find group or user for {user}")
-    projects.extend(data)
-    return {Path(project["path_with_namespace"]): project["id"] for project in projects}
-
-
 class NotAGroup(Exception):
     pass
 
 
-def _get_group_subgroups(group):
-    groups = []
-    response = GITLAB.get(
-        f"https://gitlab.com/api/v4/groups/{group}/subgroups",
-        params={"per_page": 100, "page": 1},
-    )
-    while response.headers.get("X-Next-Page"):
-        groups.extend(response.json())
-        response = GITLAB.get(
-            f"https://gitlab.com/api/v4/groups/{group}/subgroups",
-            params={"per_page": 100, "page": response.headers["X-Next-Page"]},
-        )
-    data = response.json()
-    if not isinstance(data, list):
-        raise NotAGroup(data)
-    groups.extend(data)
-    for group in groups:
-        groups.extend(_get_group_subgroups(group["id"]))
-    return groups
+class ProjectCollector(object):
+    """
+    Class to collect project {path: id} from GitLab using asynchronous HTTP
+    requests to speed up traversing tree structures.
 
+    """
 
-def _get_all_projects(group_or_user):
-    try:
-        groups = _get_group_subgroups(group_or_user)
-        is_user = False
-    except NotAGroup:
+    async def _get_user_projects(self, user):
+        projects = []
+        async with self.session.get(
+            f"https://gitlab.com/api/v4/users/{user}/projects",
+            params={"per_page": 100, "page": 1, "simple": 1},
+        ) as response:
+            projects.extend(await response.json())
+            next_page = response.headers.get("X-Next-Page")
+
+        while next_page:
+            async with self.session.get(
+                f"https://gitlab.com/api/v4/users/{user}/projects",
+                params={
+                    "per_page": 100,
+                    "page": next_page,
+                    "simple": 1,
+                },
+            ) as response:
+                projects.extend(await response.json())
+                next_page = response.headers.get("X-Next-Page")
+
+        return {Path(project["path_with_namespace"]): project["id"] for project in projects}
+
+    async def _get_group_projects(self, group):
+        projects = []
+        async with self.session.get(
+            f"https://gitlab.com/api/v4/groups/{group}/projects",
+            params={"per_page": 100, "page": 1, "simple": 1},
+        ) as response:
+            data = await response.json()
+            projects.extend(data)
+            next_page = response.headers.get("X-Next-Page")
+
+        while next_page:
+            async with self.session.get(
+                f"https://gitlab.com/api/v4/groups/{group}/projects",
+                params={
+                    "per_page": 100,
+                    "page": next_page,
+                    "simple": 1,
+                },
+            ) as response:
+                projects.extend(await response.json())
+                next_page = response.headers.get("X-Next-Page")
+
+        return {Path(project["path_with_namespace"]): project["id"] for project in projects}
+
+    async def _get_group_subgroups(self, group):
+        """Yields a (sub)group names/ids"""
         groups = []
-        is_user = True
+        async with self.session.get(
+            f"https://gitlab.com/api/v4/groups/{group}/subgroups",
+            params={"per_page": 100, "page": 1},
+        ) as response:
+            data = await response.json()
+            if not isinstance(data, list):
+                raise NotAGroup()
+            groups.extend(data)
+            next_page = response.headers.get("X-Next-Page")
+        # yield the given group when we know it isn't a user
+        yield group
 
-    if is_user:
-        return _list_user_projects(group_or_user)
-    else:
-        projects = {}
-        for group in [group_or_user] + [group["id"] for group in groups]:
-            projects.update(_list_group_projects(group))
-        return projects
+        while next_page:
+            async with self.session.get(
+                f"https://gitlab.com/api/v4/groups/{group}/subgroups",
+                params={"per_page": 100, "page": next_page},
+            ) as response:
+                data = await response.json()
+                groups.extend(data)
+                next_page = response.headers.get("X-Next-Page")
+
+        for group_data in groups:
+            yield group_data["id"]
+            async for subgroup_id in self._get_group_subgroups(group_data["id"]):
+                yield subgroup_id
+
+    async def _get_entity_projects(self, entity):
+        try:
+            projects = {}
+            for projects_future in asyncio.as_completed([
+                    asyncio.ensure_future(self._get_group_projects(group))
+                    async for group in self._get_group_subgroups(entity)
+            ]):
+                projects.update(await projects_future)
+            return projects
+        except NotAGroup:
+            pass
+        return await self._get_user_projects(entity)
+
+    async def _get_paths(self, paths):
+        entities = {path.partition("_")[0] for path in paths}
+        all_paths = {}
+        async with ClientSession(headers={"Private-Token": ACCESS_TOKEN}) as self.session:
+            paths_futures = []
+            for paths_future in asyncio.as_completed([
+                    asyncio.ensure_future(self._get_entity_projects(entity))
+                    for entity in entities
+            ]):
+                paths_futures.append(paths_future)
+            for paths in asyncio.as_completed(paths_futures):
+                all_paths.update(await paths)
+        return all_paths
+
+    def collect_paths(self, paths):
+        """
+        Return a dictionary of {path: id} for projects under the given paths in GitLab.
+
+        """
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(self._get_paths(paths))
 
 
 def _get_local_paths():
@@ -328,9 +366,7 @@ def _load_repos():
     global ALL_REPOS, LOCAL_ONLY_REPOS, REMOTE_ONLY_REPOS, COMMON_REPOS
 
     local_paths = _get_local_paths()
-    remote_paths = {}
-    for group in {path.partition("_")[0] for path in PATHS}:
-        remote_paths.update(_get_all_projects(group))
+    remote_paths = ProjectCollector().collect_paths(PATHS)
 
     COMMON_REPOS = {
         path: id_ for path, id_ in sorted(remote_paths.items()) if path in local_paths
@@ -397,7 +433,10 @@ def sync(ctx):
         click.secho(f"Cloning {click.style(str(path), bold=True)}", fg="yellow")
         repo = Repository(path)
         repo.local_path.mkdir(parents=True, exist_ok=True)
-        repo("clone", f"git@gitlab.com:{path}.git", ".", check=True)
+        git_url = f"git@gitlab.com:{path}.git"
+        result = repo("clone", git_url, ".")
+        if result.returncode:
+            click.secho(f"unable to clone {click.style(git_url, bold=True)}", fg="red")
 
     # update the rest
     for path in COMMON_REPOS:

@@ -13,7 +13,7 @@ setup(
     author_email="github+pypi@oliverbristow.co.uk",
     name="gitlab-tree",
     use_scm_version=True,
-    install_requires=["click", "toml", "requests"],
+    install_requires=["aiohttp", "click", "toml", "requests"],
     long_description=long_description,
     description="synchronise GitLab repositories",
     setup_requires=["setuptools_scm", "wheel"],
