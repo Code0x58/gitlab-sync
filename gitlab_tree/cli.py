@@ -137,6 +137,7 @@ class Repository(object):
                     self(
                         "reset",
                         f"refs/remotes/{REMOTE_NAME}/{PRIMARY_BRANCH}",
+                        "--hard",
                         check=True,
                     )
                 else:
