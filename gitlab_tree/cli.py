@@ -418,9 +418,9 @@ def sync(ctx):
                     fg="red",
                 )
                 shutil.move(local.local_path, Repository(remote).local_path)
-                del REMOTE_ONLY_REPOS[local.path]
-                local = remote
-                COMMON_REPOS[remote.path] = remote.id
+                del REMOTE_ONLY_REPOS[remote]
+                del LOCAL_ONLY_REPOS[path]
+                COMMON_REPOS[remote] = remote_id
                 break
         else:
             # means the repo has yet to be created
