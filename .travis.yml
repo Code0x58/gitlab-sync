@@ -1,0 +1,12 @@
+language: python
+sudo: required
+dist: trusty
+python:
+  - "3.7-dev"
+cache: pip
+install:
+  - sudo apt-get install openssh-client
+  - eval "$(ssh-agent -s)"
+  - pip install .[test]
+script:
+  - pytest tests/

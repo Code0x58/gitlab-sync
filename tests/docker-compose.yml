@@ -1,0 +1,8 @@
+version: "3.4"
+services:
+  gitlab:
+    image: gitlab/gitlab-ce
+    ports:
+      - 22
+      - 80
+      - 443

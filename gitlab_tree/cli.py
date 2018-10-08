@@ -182,7 +182,11 @@ REMOTE_NAME = "origin"
 def _load_config():
     global ACCESS_TOKEN, BASE_DIRECTORY, GITLAB, PATHS, REMOTE_NAME
     path = Path(os.path.expanduser("~"))
-    locations = (path / ".config/gitlab-tree.toml", path / ".gitlab-tree.toml")
+    if "GITLAB_TREE_CONFIG" in os.environ:
+        # for tests
+        locations = [os.environ("GITLAB_TREE_CONFIG")]
+    else:
+        locations = (path / ".config/gitlab-tree.toml", path / ".gitlab-tree.toml")
     for location in locations:
         if location.is_file():
             break
