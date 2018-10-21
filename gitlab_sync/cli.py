@@ -199,7 +199,7 @@ def _load_config():
         # for tests
         locations = [os.environ("GITLAB_TREE_CONFIG")]
     else:
-        locations = (path / ".config/gitlab-tree.toml", path / ".gitlab-tree.toml")
+        locations = (path / ".config/gitlab-sync.toml", path / ".gitlab-sync.toml")
     for location in locations:
         if location.is_file():
             break

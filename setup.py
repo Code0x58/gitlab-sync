@@ -12,7 +12,7 @@ TEST_REQUIRES = ["pytest>=3.9", "pytest-docker", "grab"]
 setup(
     author="Oliver Bristow",
     author_email="github+pypi@oliverbristow.co.uk",
-    name="gitlab-tree",
+    name="gitlab-sync",
     use_scm_version=True,
     install_requires=["aiohttp", "click", "toml", "requests"],
     long_description=long_description,
@@ -20,7 +20,7 @@ setup(
     setup_requires=["setuptools_scm", "wheel", "pytest-runner"],
     tests_require=TEST_REQUIRES,
     extras_require={"test": TEST_REQUIRES},
-    entry_points={"console_scripts": ["gitlab-tree = gitlab_tree.cli:main"]},
-    packages=["gitlab_tree"],
+    entry_points={"console_scripts": ["gitlab-sync = gitlab_sync.cli:main"]},
+    packages=["gitlab_sync"],
     python_requires=">=3.5",
 )

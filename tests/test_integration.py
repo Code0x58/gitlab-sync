@@ -110,7 +110,7 @@ def gitlab(docker_ip, docker_services, tmp_path_factory, pytestconfig):
             raise NotImplemented
 
         def make_runner(self, extra_config=[]):
-            """Return a callable which makes config and executes gitlab-tree."""
+            """Return a callable which makes config and executes gitlab-sync."""
 
             def run(*args):
                 with tempfile.NamedTemporaryFile("w") as config:
@@ -123,7 +123,7 @@ def gitlab(docker_ip, docker_services, tmp_path_factory, pytestconfig):
                     config.write("\n".join(config_lines))
                     os.environ["GITLAB_TREE_CONFIG"] = config.name
                     return subprocess.run(
-                        ["python", "-m", "gitlab_tree.cli"] + list(args),
+                        ["python", "-m", "gitlab_sync.cli"] + list(args),
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
                     )
