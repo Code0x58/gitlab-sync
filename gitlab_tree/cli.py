@@ -57,7 +57,7 @@ class Repository(object):
                 self.name = name
 
             def __repr__(self):
-                return f"{type(self).__name__}({self.repo!r}, {self.name!r})"
+                return "%s(%r, %r)" % (type(self).__name__, {self.repo}, self.name)
 
             def __str__(self):
                 return self.name
@@ -73,7 +73,7 @@ class Repository(object):
                     "rev-list",
                     "--left-right",
                     "--count",
-                    f"{self.name}..refs/remotes/{REMOTE_NAME}/{self.name}",
+                    "%s..refs/remotes/%s/%s" % (self.name, REMOTE_NAME, self.name),
                     check=False,
                 )
                 if result.returncode:
@@ -94,20 +94,24 @@ class Repository(object):
         self.worktree = self.WorkingTree(self)
 
     def sync(self):
-        click.secho(f"Syncing {click.style(str(self.path), bold=True)}", fg="blue")
+        click.secho("Syncing " + click.style(str(self.path), bold=True), fg="blue")
         # TODO: work out what to do where the default branch isn't master/PRIMARY_BRANCH, e.g. mintel/presonal-dev/nick-test
         if not self.worktree:
             click.secho("cloning into new repository", fg="green", bold=True)
             self.local_path.mkdir(parents=True, exist_ok=True)
             self(
-                "clone", f"git@gitlab.com:{self.path}.git", ".", stdout=None, check=True
+                "clone",
+                "git@gitlab.com:%s.git" % (self.path,),
+                ".",
+                stdout=None,
+                check=True,
             )
         elif self.worktree.branch == PRIMARY_BRANCH or self.worktree.is_empty:
             if not self.worktree.clean:
                 click.secho("work tree is dirty", fg="red", bold=True)
                 return
             # result = repo("pull", "origin", "master", "--tags", stderr=sys.stderr, stdout=sys.stdout)
-            click.echo(f"Fetching from {REMOTE_NAME}")
+            click.echo("Fetching from " + REMOTE_NAME)
             result = self("fetch", "--prune", "--tags", REMOTE_NAME)
             if result.returncode:
                 click.secho(
@@ -117,39 +121,48 @@ class Repository(object):
                 )
             else:
                 if self.worktree.is_empty:
-                    click.secho(f"repository is still empty", fg="green", bold=True)
+                    click.secho("repository is still empty", fg="green", bold=True)
                     return
                 behind, ahead = self.worktree.branch.remote_changes
                 if behind:
                     # can't fast foward in the changes as there are non-pushed local changes
                     click.secho(
-                        f"local {PRIMARY_BRANCH} has {behind} commants that aren't in {REMOTE_NAME}",
+                        "local {PRIMARY_BRANCH} has {behind} commants that aren't in {REMOTE_NAME}".format(
+                            **locals()
+                        ),
                         fg="red",
                         bold=True,
                     )
                     pass
                 elif ahead:
                     click.secho(
-                        f"{ahead} new commits, resetting local {PRIMARY_BRANCH} to that of {REMOTE_NAME}",
+                        "{ahead} new commits, resetting local {PRIMARY_BRANCH} to that of {REMOTE_NAME}".format(
+                            **locals()
+                        ),
                         fg="green",
                         bold=True,
                     )
                     self(
                         "reset",
-                        f"refs/remotes/{REMOTE_NAME}/{PRIMARY_BRANCH}",
+                        "refs/remotes/{REMOTE_NAME}/{PRIMARY_BRANCH}".format(
+                            **locals()
+                        ),
                         "--hard",
                         check=True,
                     )
                 else:
                     # up to date
                     click.secho(
-                        f"local {PRIMARY_BRANCH} is already up to date",
+                        "local {PRIMARY_BRANCH} is already up to date".format(
+                            **locals()
+                        ),
                         fg="green",
                         bold=True,
                     )
         else:
             click.secho(
-                f"local branch is {self.worktree.branch} instead of {PRIMARY_BRANCH}",
+                "local branch is %s instead of %s"
+                % (self.worktree.branch, PRIMARY_BRANCH),
                 fg="red",
                 bold=True,
             )
@@ -169,7 +182,7 @@ class Repository(object):
         return subprocess.run(["git", "-C", str(self.local_path), *args], **kwargs)
 
     def __repr__(self):
-        return f"{type(self).__name__}({str(self.path)!r})"
+        return "%s(%r, %r)" % (type(self).__name__, {self.repo}, self.name)
 
 
 ACCESS_TOKEN = None
@@ -192,18 +205,27 @@ def _load_config():
             break
     else:
         raise ValueError(
-            f"Config does not exist in one of {', '.join(map(str, locations))}"
+            "Config does not exist in one of " + ", ".join(map(str, locations))
         )
 
     config = toml.load(str(location))
     if isinstance(config.get("access-token-command"), list):
         access_token_command = config["access-token-command"]
-        result = subprocess.run(access_token_command, stdin=sys.stdin, stderr=sys.stderr, stdout=subprocess.PIPE, text=True, check=True)
+        result = subprocess.run(
+            access_token_command,
+            stdin=sys.stdin,
+            stderr=sys.stderr,
+            stdout=subprocess.PIPE,
+            text=True,
+            check=True,
+        )
         ACCESS_TOKEN = result.stdout.strip()
     elif isinstance(config.get("access-token"), str):
         ACCESS_TOKEN = config["access-token"]
     else:
-        raise ValueError("one of access-token or access-token-command is required and must be a string")
+        raise ValueError(
+            "one of access-token or access-token-command is required and must be a string"
+        )
 
     GITLAB = requests.Session()
     GITLAB.headers.update({"Private-Token": ACCESS_TOKEN})
@@ -248,7 +270,7 @@ class ProjectCollector(object):
     async def _get_user_projects(self, user):
         projects = []
         async with self.session.get(
-            f"https://gitlab.com/api/v4/users/{user}/projects",
+            "https://gitlab.com/api/v4/users/{user}/projects".format(**locals()),
             params={"per_page": 100, "page": 1, "simple": 1},
         ) as response:
             projects.extend(await response.json())
@@ -256,22 +278,20 @@ class ProjectCollector(object):
 
         while next_page:
             async with self.session.get(
-                f"https://gitlab.com/api/v4/users/{user}/projects",
-                params={
-                    "per_page": 100,
-                    "page": next_page,
-                    "simple": 1,
-                },
+                "https://gitlab.com/api/v4/users/{user}/projects".format(**locals()),
+                params={"per_page": 100, "page": next_page, "simple": 1},
             ) as response:
                 projects.extend(await response.json())
                 next_page = response.headers.get("X-Next-Page")
 
-        return {Path(project["path_with_namespace"]): project["id"] for project in projects}
+        return {
+            Path(project["path_with_namespace"]): project["id"] for project in projects
+        }
 
     async def _get_group_projects(self, group):
         projects = []
         async with self.session.get(
-            f"https://gitlab.com/api/v4/groups/{group}/projects",
+            "https://gitlab.com/api/v4/groups/{group}/projects".format(**locals()),
             params={"per_page": 100, "page": 1, "simple": 1},
         ) as response:
             data = await response.json()
@@ -280,23 +300,21 @@ class ProjectCollector(object):
 
         while next_page:
             async with self.session.get(
-                f"https://gitlab.com/api/v4/groups/{group}/projects",
-                params={
-                    "per_page": 100,
-                    "page": next_page,
-                    "simple": 1,
-                },
+                "https://gitlab.com/api/v4/groups/{group}/projects".format(**locals()),
+                params={"per_page": 100, "page": next_page, "simple": 1},
             ) as response:
                 projects.extend(await response.json())
                 next_page = response.headers.get("X-Next-Page")
 
-        return {Path(project["path_with_namespace"]): project["id"] for project in projects}
+        return {
+            Path(project["path_with_namespace"]): project["id"] for project in projects
+        }
 
     async def _get_group_subgroups(self, group):
         """Yields a (sub)group names/ids"""
         groups = []
         async with self.session.get(
-            f"https://gitlab.com/api/v4/groups/{group}/subgroups",
+            "https://gitlab.com/api/v4/groups/{group}/subgroups".format(**locals()),
             params={"per_page": 100, "page": 1},
         ) as response:
             data = await response.json()
@@ -309,7 +327,7 @@ class ProjectCollector(object):
 
         while next_page:
             async with self.session.get(
-                f"https://gitlab.com/api/v4/groups/{group}/subgroups",
+                "https://gitlab.com/api/v4/groups/{group}/subgroups".format(**locals()),
                 params={"per_page": 100, "page": next_page},
             ) as response:
                 data = await response.json()
@@ -324,10 +342,12 @@ class ProjectCollector(object):
     async def _get_entity_projects(self, entity):
         try:
             projects = {}
-            for projects_future in asyncio.as_completed([
-                    asyncio.ensure_future(self._get_group_projects(group))
-                    async for group in self._get_group_subgroups(entity)
-            ]):
+            for projects_future in asyncio.as_completed(
+                [
+                    asyncio.ensure_future(self._get_group_projects(group)) async
+                    for group in self._get_group_subgroups(entity)
+                ]
+            ):
                 projects.update(await projects_future)
             return projects
         except NotAGroup:
@@ -337,12 +357,16 @@ class ProjectCollector(object):
     async def _get_paths(self, paths):
         entities = {path.partition("_")[0] for path in paths}
         all_paths = {}
-        async with ClientSession(headers={"Private-Token": ACCESS_TOKEN}) as self.session:
+        async with ClientSession(
+            headers={"Private-Token": ACCESS_TOKEN}
+        ) as self.session:
             paths_futures = []
-            for paths_future in asyncio.as_completed([
+            for paths_future in asyncio.as_completed(
+                [
                     asyncio.ensure_future(self._get_entity_projects(entity))
                     for entity in entities
-            ]):
+                ]
+            ):
                 paths_futures.append(paths_future)
             for paths in asyncio.as_completed(paths_futures):
                 all_paths.update(await paths)
@@ -376,7 +400,9 @@ def _load_repos():
     COMMON_REPOS = {
         path: id_ for path, id_ in sorted(remote_paths.items()) if path in local_paths
     }
-    LOCAL_ONLY_REPOS = {path: None for path in sorted(local_paths) if path not in COMMON_REPOS}
+    LOCAL_ONLY_REPOS = {
+        path: None for path in sorted(local_paths) if path not in COMMON_REPOS
+    }
     REMOTE_ONLY_REPOS = {
         path: id_ for path, id_ in remote_paths.items() if path not in COMMON_REPOS
     }
@@ -406,19 +432,24 @@ def sync(ctx):
         if local.worktree.is_empty:
             # means the repo has yet to be created
             click.secho(
-                f"{click.style(str(path), bold=True)} has not been created in GitLab",
+                click.style(str(path), bold=True) + " has not been created in GitLab",
                 fg="red",
             )
             continue
         initial_commit = local.worktree.initial_commit
         for remote, remote_id in REMOTE_ONLY_REPOS.items():
             response = GITLAB.get(
-                f"https://gitlab.com/api/v4/projects/{remote_id}/repository/commits/{initial_commit}",
+                "https://gitlab.com/api/v4/projects/{remote_id}/repository/commits/{initial_commit}".format(
+                    **local()
+                ),
                 params={"stats": False},
             )
             if response.status_code == 200:
                 click.secho(
-                    f"Found {click.style(str(local), bold=True)} was moved to {click.style(str(remote), bold=True)}",
+                    "Found "
+                    + click.style(str(local), bold=True)
+                    + " was moved to "
+                    + click.style(str(remote), bold=True),
                     fg="red",
                 )
                 shutil.move(local.local_path, Repository(remote).local_path)
@@ -429,19 +460,19 @@ def sync(ctx):
         else:
             # means the repo has yet to be created
             click.secho(
-                f"{click.style(str(path), bold=True)} has not been created in GitLab",
+                click.style(str(path), bold=True) + " has not been created in GitLab",
                 fg="red",
             )
     # clone all the new remotes
     for path in REMOTE_ONLY_REPOS:
         # TODO: if debug, alyways let git output get to console (may need to tee)
-        click.secho(f"Cloning {click.style(str(path), bold=True)}", fg="yellow")
+        click.secho("Cloning " + click.style(str(path), bold=True), fg="yellow")
         repo = Repository(path)
         repo.local_path.mkdir(parents=True, exist_ok=True)
-        git_url = f"git@gitlab.com:{path}.git"
+        git_url = "git@gitlab.com:{path}.git".format(**locals())
         result = repo("clone", git_url, ".")
         if result.returncode:
-            click.secho(f"unable to clone {click.style(git_url, bold=True)}", fg="red")
+            click.secho("unable to clone " + click.style(git_url, bold=True), fg="red")
 
     # update the rest
     for path in COMMON_REPOS:
@@ -455,7 +486,7 @@ def tree(ctx):
     for path in ALL_REPOS:
         colour = "green" if path in COMMON_REPOS else "yellow"
         icon = "↔" if path in COMMON_REPOS else "→" if path in LOCAL_ONLY_REPOS else "←"
-        click.secho(f"{icon} {path}", fg=colour)
+        click.secho("{icon} {path}".format(**locals()), fg=colour)
 
 
 if __name__ == "__main__":

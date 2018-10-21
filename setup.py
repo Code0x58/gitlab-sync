@@ -22,5 +22,5 @@ setup(
     extras_require={"test": TEST_REQUIRES},
     entry_points={"console_scripts": ["gitlab-tree = gitlab_tree.cli:main"]},
     packages=["gitlab_tree"],
-    python_requires=">=3.7",
+    python_requires=">=3.5",
 )

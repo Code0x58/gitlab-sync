@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/Code0x58/gitlab-tree.svg?branch=master)](https://travis-ci.org/Code0x58/gitlab-tree)
+
 ## gitlab-tree
 This provides the gitlab-tree tool which clones GitLab and updates repositories.
 
