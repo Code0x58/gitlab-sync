@@ -16,8 +16,9 @@ def docker_compose_file(pytestconfig):
 
 @pytest.fixture(scope="session")
 def gitlab(docker_ip, docker_services, tmp_path_factory, pytestconfig):
-    http_url = "http://%s:%s" % (docker_ip, docker_services.port_for("gitlab", 80))
-    git_url = "git+ssh://%s:%s" % (docker_ip, docker_services.port_for("gitlab", 22))
+    """Manage a GitLab instance and return an object which can interact with it."""
+    http_url = "http://%s:%s/" % (docker_ip, docker_services.port_for("gitlab", 80))
+    git_url = "git+ssh://%s:%s/" % (docker_ip, docker_services.port_for("gitlab", 22))
     sync_root = tmp_path_factory.mktemp("sync-root")
 
     def is_responsive():
@@ -39,7 +40,7 @@ def gitlab(docker_ip, docker_services, tmp_path_factory, pytestconfig):
     g.doc.set_input("user[password]", "password")
     g.doc.set_input("user[password_confirmation]", "password")
     response = g.submit()
-    assert response.url == http_url + "/users/sign_in"
+    assert response.url == http_url + "users/sign_in"
 
     # add vagrant insecure ssh key to keychain
     private_key = str(pytestconfig.rootdir / "tests/key.rsa")
@@ -69,17 +70,17 @@ def gitlab(docker_ip, docker_services, tmp_path_factory, pytestconfig):
             # sign/register in page - make new user as root can't log in
             g = Grab()
             g.clear_cookies()
-            response = g.go(self.http_url + "/users/sign_in")
-            assert response.url == http_url + "/users/sign_in"
+            response = g.go(self.http_url + "users/sign_in")
+            assert response.url == http_url + "users/sign_in"
             g.doc.set_input("new_user[name]", "name")
             g.doc.set_input("new_user[username]", username)
             g.doc.set_input("new_user[email]", username + "@example.com")
             g.doc.set_input("new_user[email_confirmation]", username + "@example.com")
             g.doc.set_input("new_user[password]", "password")
             response = g.submit("commit")
-            assert response.url == self.http_url + "/dashboard/projects"
+            assert response.url == self.http_url + "dashboard/projects"
 
-            g.go(self.http_url + "/profile/personal_access_tokens")
+            g.go(self.http_url + "profile/personal_access_tokens")
             g.doc.choose_form(id="new_personal_access_token")
             g.doc.set_input("personal_access_token[name]", "access-token")
             # g.doc.set_input("personal_access_token[scopes][]", "api")
@@ -89,7 +90,7 @@ def gitlab(docker_ip, docker_services, tmp_path_factory, pytestconfig):
                 submit_name="commit",
                 extra_post={"personal_access_token[scopes][]": ["api"]},
             )
-            assert response.url == self.http_url + "/profile/personal_access_tokens"
+            assert response.url == self.http_url + "profile/personal_access_tokens"
 
             dom = response.build_html_tree()
             element = dom.get_element_by_id("created-personal-access-token")
@@ -99,7 +100,7 @@ def gitlab(docker_ip, docker_services, tmp_path_factory, pytestconfig):
             session.headers.update({"Private-Token": token})
             if public_key:
                 response = session.post(
-                    self.http_url + "/api/v4/user/keys",
+                    self.http_url + "api/v4/user/keys",
                     json={"title": "key", "key": public_key},
                 )
                 response.raise_for_status()
@@ -112,20 +113,22 @@ def gitlab(docker_ip, docker_services, tmp_path_factory, pytestconfig):
         def make_runner(self, extra_config=[]):
             """Return a callable which makes config and executes gitlab-sync."""
 
-            def run(*args):
+            def run(*args, **kwargs):
                 with tempfile.NamedTemporaryFile("w") as config:
                     config_lines = [
+                        '["%s"]' % sync_root,
                         'gitlab-url = "%s"' % self.http_url,
                         'access-token = "%s"' % self.token,
                         'paths = ["%s"]' % self.username,
-                        'base-directory = "%s"' % sync_root,
                     ] + extra_config
                     config.write("\n".join(config_lines))
-                    os.environ["GITLAB_TREE_CONFIG"] = config.name
+                    config.flush()
+                    env = os.environ.copy()
+                    env["GITLAB_SYNC_CONFIG"] = config.name
                     return subprocess.run(
                         ["python", "-m", "gitlab_sync.cli"] + list(args),
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
+                        env=env,
+                        **kwargs,
                     )
 
             return run
@@ -138,6 +141,4 @@ def gitlab(docker_ip, docker_services, tmp_path_factory, pytestconfig):
 def test_smoke(gitlab):
     print(gitlab.session.get(gitlab.http_url + "/api/v4/users").json())
     gitlab_sync = gitlab.make_runner()
-    gitlab_sync("tree")
-    gitlab_sync("sync")
-    gitlab_sync("tree")
+    gitlab_sync("local-update", check=True)

@@ -2,10 +2,8 @@ language: python
 sudo: required
 dist: trusty
 python:
-  - "3.5"
   - "3.6"
   - "3.7-dev"
-  - "pypy3"
 install:
   - sudo apt-get install openssh-client
   - eval "$(ssh-agent -s)"
