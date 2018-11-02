@@ -128,7 +128,7 @@ class Repository(object):
                     # can't fast foward in the changes as there are non-pushed local changes
                     click.secho(
                         "local {PRIMARY_BRANCH} has {behind} commants that aren't in {REMOTE_NAME}".format(
-                            **locals()
+                            **globals(), **locals()
                         ),
                         fg="red",
                         bold=True,
@@ -137,7 +137,7 @@ class Repository(object):
                 elif ahead:
                     click.secho(
                         "{ahead} new commits, resetting local {PRIMARY_BRANCH} to that of {REMOTE_NAME}".format(
-                            **locals()
+                            **globals(), **locals()
                         ),
                         fg="green",
                         bold=True,
@@ -145,7 +145,7 @@ class Repository(object):
                     self(
                         "reset",
                         "refs/remotes/{REMOTE_NAME}/{PRIMARY_BRANCH}".format(
-                            **locals()
+                            **globals(), **locals()
                         ),
                         "--hard",
                         check=True,
@@ -154,7 +154,7 @@ class Repository(object):
                     # up to date
                     click.secho(
                         "local {PRIMARY_BRANCH} is already up to date".format(
-                            **locals()
+                            **globals(), **locals()
                         ),
                         fg="green",
                         bold=True,
@@ -181,8 +181,11 @@ class Repository(object):
             kwargs.setdefault("stderr", subprocess.PIPE)
         return subprocess.run(["git", "-C", str(self.local_path), *args], **kwargs)
 
+    def __str__(self):
+        return str(self.path)
+
     def __repr__(self):
-        return "%s(%r, %r)" % (type(self).__name__, {self.repo}, self.name)
+        return "%s(%r, %r)" % (type(self).__name__, {self.path}, self.id)
 
 
 ACCESS_TOKEN = None
@@ -427,7 +430,7 @@ def main(ctx):
 @click.pass_context
 def sync(ctx):
     # work out if the origin has been moved, or if has yet to be created
-    for path in LOCAL_ONLY_REPOS:
+    for path in tuple(LOCAL_ONLY_REPOS):
         local = Repository(path)
         if local.worktree.is_empty:
             # means the repo has yet to be created
@@ -437,10 +440,10 @@ def sync(ctx):
             )
             continue
         initial_commit = local.worktree.initial_commit
-        for remote, remote_id in REMOTE_ONLY_REPOS.items():
+        for remote, remote_id in tuple(REMOTE_ONLY_REPOS.items()):
             response = GITLAB.get(
                 "https://gitlab.com/api/v4/projects/{remote_id}/repository/commits/{initial_commit}".format(
-                    **local()
+                    **locals()
                 ),
                 params={"stats": False},
             )
