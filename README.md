@@ -1,9 +1,10 @@
 [![Build Status](https://travis-ci.org/Code0x58/gitlab-sync.svg?branch=master)](https://travis-ci.org/Code0x58/gitlab-sync)
 
-## gitlab-sync
+# gitlab-sync
 This provides the gitlab-sync tool which clones GitLab and updates repositories.
 
-### Config
+
+## Config
 You will need to have [SSH access configured for GitLab](https://docs.gitlab.com/ee/ssh/), and
 have created a [personal access token](https://docs.gitlab.com/ee/api/#personal-access-tokens)
 with API access.
@@ -21,13 +22,32 @@ access-token = ["pass", "GitLab/api-access-token"]
 
 # paths to clone from GitLab, can include slashes for groups/projects
 paths = [ "mintel", "obristow" ]
+strategy = "mirror"
 ```
 
-### Usage
+
+## Usage
 ```
 $ gitlab-sync local-update
 ```
 
+### Strategies
+You have to define a strategy for each local copy you define in config, the
+strategy defines what will happen when gitlab-sync runs over the given copy.
+
+#### mirror
+ 1. delete repositories which no longer exist remotely
+ 2. move repositories which have been moved remotely
+ 3. update local repositories
+ 4. clean local repositories (prune+gc)
+ 5. clone new repositories
+
+This is good for having a local copy which you can use to perform searches
+in using something like [`ag`](https://github.com/ggreer/the_silver_searcher).
+
+The local copies should not be modified by users.
+
+
 ## To do
  * flesh out integration tests
- * cater for new repositories being made
+ * cater for new repositories being made locally and pushed remotely

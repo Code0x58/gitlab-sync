@@ -67,12 +67,14 @@ def test_schema(tmpdir):
     assert gitlab_sync.config.schema({
         str(tmpdir): {
             "access-token": ["echo", "hello"],
-            "paths": ["parent"]
+            "paths": ["parent"],
+            "strategy": "mirror",
         }
     }) == {
         Path(tmpdir): {
             "access_token": "hello",
             "paths": [Path("parent")],
+            "strategy": gitlab_sync.strategy.mirror,
         }
     }
 
@@ -81,12 +83,14 @@ def test_schema(tmpdir):
             "access-token": "hello",
             "paths": ["parent"],
             "gitlab-url": "https://example.com/",
+            "strategy": "mirror",
         }
     }) == {
         Path(tmpdir): {
             "access_token": "hello",
             "paths": [Path("parent")],
-            "gitlab_url": "https://example.com/"
+            "gitlab_url": "https://example.com/",
+            "strategy": gitlab_sync.strategy.mirror,
         }
     }
 
@@ -95,9 +99,10 @@ def test_find_and_load_config(tmpdir, monkeypatch):
     """Returns a map of paths to RunConfig objects."""
     config_file = tmpdir / "gitlab-sync.toml"
     config_file.write("""
-    ["{tmpdir}"]
-    access-token = "literal"
-    paths = [ "parent1/child", "parent2" ]
+        ["{tmpdir}"]
+        access-token = "literal"
+        paths = [ "parent1/child", "parent2" ]
+        strategy = "mirror"
     """.format(tmpdir=tmpdir))
 
     monkeypatch.setenv("GITLAB_SYNC_CONFIG", str(config_file))
@@ -107,5 +112,6 @@ def test_find_and_load_config(tmpdir, monkeypatch):
             base_path=Path(tmpdir),
             paths=[Path("parent1/child"), Path("parent2")],
             access_token="literal",
+            strategy=gitlab_sync.strategy.mirror,
         ),
     }

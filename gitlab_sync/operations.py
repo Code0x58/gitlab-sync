@@ -1,7 +1,7 @@
 """Module containing low level operations on repositories.
 
 These operation don't work out what to do at any point, that logic is left to
-the strategies in the conductor module.
+the strategy module.
 
 """
 import os

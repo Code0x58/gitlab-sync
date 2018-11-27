@@ -13,7 +13,7 @@ from gitlab_sync import logger
 
 
 # XXX: it may be good to generate the maps in a helper method
-def backup(config):
+def mirror(config):
     """Perform necissary actions to update a local copy using backup logic."""
     locals_ = list(gitlab_sync.repository.enumerate_local(config.base_path))
     # TODO: update paths to be namespaces in other places

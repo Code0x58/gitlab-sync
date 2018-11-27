@@ -7,10 +7,12 @@ other members should be considered private.
 import os
 import subprocess
 import sys
+import types
 import typing
 from pathlib import Path
 
 import attr
+import gitlab_sync.strategy
 import toml
 from voluptuous import All, And, Any, Invalid, MultipleInvalid, Optional, Replace, Required, Schema, Url
 
@@ -43,6 +45,14 @@ def string_or_source(value: typing.Union[str, typing.List[str]]) -> str:
     ).stdout.strip()
 
 
+def valid_strategy(value: str) -> typing.Callable[["RunConfig"], None]:
+    """Lookup a strategy given it's name."""
+    strategy = getattr(gitlab_sync.strategy, value, None)
+    if not isinstance(strategy, types.FunctionType):
+        raise Invalid("Must be the name of a strategy.")
+    return strategy
+
+
 schema = Schema({
     Required(absolute_dir_path): {
         Required(All("access-token", Replace("-", "_"))): And(
@@ -52,6 +62,7 @@ schema = Schema({
             ), string_or_source,
         ),
         Required("paths"): [gitlab_path],
+        Required("strategy"): valid_strategy,
         Optional(All("gitlab-url", Replace("-", "_"))): Url(),
     }
 })
@@ -75,7 +86,7 @@ def find_config() -> Path:
 
 
 def load_config(file_: typing.TextIO) -> dict:
-    """Load and validate config from a file"""
+    """Load and validate config from a file."""
     try:
         return schema(toml.load(file_))
     except (toml.TomlDecodeError, IOError, FileNotFoundError, TypeError) as e:
@@ -89,6 +100,7 @@ class RunConfig:
     base_path: Path
     paths: typing.List[Path]
     access_token: str
+    strategy: typing.Callable[["RunConfig"], None]
     gitlab_url: str = "https://gitlab.com/"
 
 

@@ -3,7 +3,7 @@ import logging
 
 import click
 import gitlab_sync
-import gitlab_sync.conductor
+import gitlab_sync.strategy
 from gitlab_sync.config import find_and_load_config
 
 
@@ -28,6 +28,7 @@ def main(ctx, verbose):
 @main.command("local-update", short_help="synchronise managed repositories")
 @click.pass_context
 def local_update(ctx):
+    """Manage local copies of repositories on GitLab."""
     run_configs = ctx.obj
     # XXX: more like mirror really, and that should be a config only thing,
     #  not something you choose on a run by run basis…
@@ -35,17 +36,7 @@ def local_update(ctx):
     # guard against deleting all projects if restoring config from backup
     # but not repo directory
     for config in run_configs.values():
-        gitlab_sync.conductor.backup(config)
-        # pull in changes from GitLab
-        #  * fetch remote
-        #  * update remote head
-        #  * what if branches are ahead or diverged? - only care about origin/HEAD
-        # gitlab_sync.conductor.pull_changes()
-        # XXX: push means have to consider various heads changing
-        # push out changes to GitLab
-        #  * push branches - config to disallow pushing to remote HEAD
-        #  * create new projects (what happens if no permission, manually created?)
-        # gitlab_sync.conductor.push_changes()
+        config.strategy(config)
 
 
 if __name__ == "__main__":

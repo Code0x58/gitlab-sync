@@ -120,6 +120,7 @@ def gitlab(docker_ip, docker_services, tmp_path_factory, pytestconfig):
                         'gitlab-url = "%s"' % self.http_url,
                         'access-token = "%s"' % self.token,
                         'paths = ["%s"]' % self.username,
+                        'strategy = "mirror"',
                     ] + extra_config
                     config.write("\n".join(config_lines))
                     config.flush()
