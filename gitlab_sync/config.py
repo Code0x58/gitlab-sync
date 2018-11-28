@@ -14,6 +14,7 @@ from pathlib import Path
 import attr
 import gitlab_sync.strategy
 import toml
+from gitlab_sync import ConfigurationError
 from voluptuous import All, And, Any, Invalid, MultipleInvalid, Optional, Replace, Required, Schema, Url
 
 
@@ -77,12 +78,12 @@ def find_config() -> Path:
         if path.is_file():
             return path
         else:
-            raise Exception("{} given in {} is not a file".format(path, environ))
+            raise ConfigurationError("{} given in {} is not a file".format(path, environ))
     home = Path.home()
     for path in (home / ".config/gitlab-sync.toml", home / ".gitlab-sync.toml"):
         if path.is_file():
             return path
-    raise Exception("No config file found")
+    raise ConfigurationError("No config file found")
 
 
 def load_config(file_: typing.TextIO) -> dict:
@@ -90,9 +91,9 @@ def load_config(file_: typing.TextIO) -> dict:
     try:
         return schema(toml.load(file_))
     except (toml.TomlDecodeError, IOError, FileNotFoundError, TypeError) as e:
-        raise Exception("Unable to load config: %s" % e) from e
+        raise ConfigurationError("Unable to load config: %s" % e) from e
     except MultipleInvalid as e:
-        raise Exception("Config not valid: %s" % e) from e
+        raise ConfigurationError("Config not valid: %s" % e) from e
 
 
 @attr.s(auto_attribs=True)

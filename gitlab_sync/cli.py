@@ -5,6 +5,7 @@ import click
 import gitlab_sync
 import gitlab_sync.strategy
 from gitlab_sync.config import find_and_load_config
+from gitlab_sync import ConfigurationError, logger
 
 
 @click.group()
@@ -21,7 +22,10 @@ def main(ctx, verbose):
     )
     gitlab_sync.tee_git = log_level == logging.DEBUG
 
-    config = find_and_load_config()
+    try:
+        config = find_and_load_config()
+    except ConfigurationError as e:
+        logger.error(str(e))
     ctx.obj = config
 
 

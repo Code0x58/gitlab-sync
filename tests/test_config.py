@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import gitlab_sync.config
+from gitlab_sync import ConfigurationError
 from voluptuous import Invalid, MultipleInvalid
 
 import pytest
@@ -11,7 +12,7 @@ import pytest
 def test_find_config(tmpdir, monkeypatch):
     """Config is loaded in priority order."""
     monkeypatch.setattr(Path, "home", lambda: Path(tmpdir))
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurationError):
         gitlab_sync.config.find_config()
 
     # home dir config is lowest priority
@@ -28,7 +29,7 @@ def test_find_config(tmpdir, monkeypatch):
     # environ is highest priority and must exist
     environ = tmpdir / "gitlab-sync.toml"
     monkeypatch.setenv("GITLAB_SYNC_CONFIG", str(environ))
-    with pytest.raises(Exception):
+    with pytest.raises(ConfigurationError):
         gitlab_sync.config.find_config()
 
     environ.write("")
