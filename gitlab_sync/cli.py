@@ -27,7 +27,7 @@ def main(ctx, verbose):
     except ConfigurationError as e:
         logger.error(str(e))
         raise SystemExit(1)
-        
+
     ctx.obj = config
 
 

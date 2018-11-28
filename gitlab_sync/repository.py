@@ -18,7 +18,7 @@ _DEV_NULL = open(os.devnull, "r+b")
 class Repository:
     base_path: pathlib.Path
     gitlab_path: pathlib.Path
-    id: typing.Optional[int]
+    id: typing.Optional[int] = None
 
     @property
     def local_path(self):
