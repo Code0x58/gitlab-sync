@@ -26,6 +26,8 @@ def main(ctx, verbose):
         config = find_and_load_config()
     except ConfigurationError as e:
         logger.error(str(e))
+        raise SystemExit(1)
+        
     ctx.obj = config
 
 
