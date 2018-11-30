@@ -1,17 +1,31 @@
 """Module for the collection and representation of information on repositories.
 
 """
+import abc
 import asyncio
 import os
 import pathlib
 import subprocess
-import attr
 import typing
 
 import aiohttp
+import attr
 import gitlab_sync
 
 _DEV_NULL = open(os.devnull, "r+b")
+
+
+@attr.s(auto_attribs=True)
+class RepoInterface(abc.ABC):
+    repo_path: pathlib.Path
+    
+    @abc.abstractmethod
+    def create(self):
+        pass
+
+    @abc.abstractmethod
+    def delete(self):
+        pass
 
 
 @attr.s(auto_attribs=True)
@@ -19,6 +33,7 @@ class Repository:
     base_path: pathlib.Path
     gitlab_path: pathlib.Path
     id: typing.Optional[int] = None
+    last_gitlab_path: typing.Optional[str] = None
 
     @property
     def local_path(self):
@@ -53,6 +68,7 @@ def enumerate_local(base_path):
         del dirs[:]
         gitlab_path = pathlib.Path(root).relative_to(base_path)
         repo = Repository(base_path, gitlab_path)
+        # remote project id
         result = repo.git(
             "config",
             "--local",
@@ -62,6 +78,17 @@ def enumerate_local(base_path):
         )
         if not result.returncode:
             repo.id = int(result.stdout.rstrip())
+        # remote gitlab path
+        result = repo.git(
+            "config",
+            "--local",
+            "gitlab-sync.project-path",
+            stdout=subprocess.PIPE,
+            universal_newlines=True,
+        )
+        if not result.returncode:
+            repo.last_gitlab_path = result.stdout.rstrip()
+
         yield repo
 
 

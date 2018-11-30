@@ -54,6 +54,22 @@ def valid_strategy(value: str) -> typing.Callable[["RunConfig"], None]:
     return strategy
 
 
+"""
+Grand config hierachy:
+class Config:
+    concurrency = 1
+    sync_configs = [SyncConfig]
+
+class Sync:
+    *config
+    repositories
+
+
+Sync:
+    config = SyncConfig
+    repos = [Repository]
+
+"""
 schema = Schema({
     Required(absolute_dir_path): {
         Required(All("access-token", Replace("-", "_"))): And(
