@@ -11,12 +11,12 @@ import subprocess
 from gitlab_sync import logger
 
 
-def clone(repo):
+def clone(config, repo):
     """Clone a new repository."""
     os.makedirs(str(repo.local_path))
     repo.git("init", ".")
     repo.git("config", "--local", "--add", "gitlab-sync.project-id", str(repo.id))
-    repo.git("remote", "add", "origin", "git@gitlab.com:%s.git" % repo.gitlab_path)
+    repo.git("remote", "add", "origin", config.gitlab_git + "%s.git" % repo.gitlab_path)
     update_local(repo)
 
 
@@ -56,7 +56,7 @@ def update_local(repo):
                 repo.git("checkout", remote_head.rpartition("/")[2])
             else:
                 raise Exception(issue.rstrip())
-    elif issue == "error: Cannot determine remote HEAD":
+    elif issue.endswith("error: Cannot determine remote HEAD"):
         logger.debug("%s is an empty project", repo)
     else:
         raise Exception(issue)

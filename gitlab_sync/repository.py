@@ -82,7 +82,7 @@ class ProjectCollector(object):
     async def _get_user_projects(self, user):
         projects = []
         async with self.session.get(
-            "{}api/v4/users/{}/projects".format(self.config.gitlab_url, user),
+            "{}api/v4/users/{}/projects".format(self.config.gitlab_http, user),
             params={"per_page": 100, "page": 1, "simple": 1},
         ) as response:
             projects.extend(await response.json())
@@ -90,7 +90,7 @@ class ProjectCollector(object):
 
         while next_page:
             async with self.session.get(
-                "{}api/v4/users/{}/projects".format(self.config.gitlab_url, user),
+                "{}api/v4/users/{}/projects".format(self.config.gitlab_http, user),
                 params={"per_page": 100, "page": next_page, "simple": 1},
             ) as response:
                 projects.extend(await response.json())
@@ -104,7 +104,7 @@ class ProjectCollector(object):
     async def _get_group_projects(self, group):
         projects = []
         async with self.session.get(
-            "{}api/v4/groups/{}/projects".format(self.config.gitlab_url, group),
+            "{}api/v4/groups/{}/projects".format(self.config.gitlab_http, group),
             params={"per_page": 100, "page": 1, "simple": 1},
         ) as response:
             data = await response.json()
@@ -113,7 +113,7 @@ class ProjectCollector(object):
 
         while next_page:
             async with self.session.get(
-                "{}api/v4/groups/{}/projects".format(self.config.gitlab_url, group),
+                "{}api/v4/groups/{}/projects".format(self.config.gitlab_http, group),
                 params={"per_page": 100, "page": next_page, "simple": 1},
             ) as response:
                 projects.extend(await response.json())
@@ -128,7 +128,7 @@ class ProjectCollector(object):
         """Yields a (sub)group names/ids"""
         groups = []
         async with self.session.get(
-            "{}api/v4/groups/{}/subgroups".format(self.config.gitlab_url, group),
+            "{}api/v4/groups/{}/subgroups".format(self.config.gitlab_http, group),
             params={"per_page": 100, "page": 1},
         ) as response:
             data = await response.json()
@@ -141,7 +141,7 @@ class ProjectCollector(object):
 
         while next_page:
             async with self.session.get(
-                "{}api/v4/groups/{}/subgroups".format(self.config.gitlab_url, group),
+                "{}api/v4/groups/{}/subgroups".format(self.config.gitlab_http, group),
                 params={"per_page": 100, "page": next_page},
             ) as response:
                 data = await response.json()

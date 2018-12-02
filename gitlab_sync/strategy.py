@@ -68,4 +68,4 @@ def mirror(config):
 
     for repo in sorted(create_map.values()):
         logger.info("copying %s", repo)
-        gitlab_sync.operations.clone(repo)
+        gitlab_sync.operations.clone(config, repo)

@@ -83,14 +83,14 @@ def test_schema(tmpdir):
         str(tmpdir): {
             "access-token": "hello",
             "paths": ["parent"],
-            "gitlab-url": "https://example.com/",
+            "gitlab-http": "https://example.com/",
             "strategy": "mirror",
         }
     }) == {
         Path(tmpdir): {
             "access_token": "hello",
             "paths": [Path("parent")],
-            "gitlab_url": "https://example.com/",
+            "gitlab_http": "https://example.com/",
             "strategy": gitlab_sync.strategy.mirror,
         }
     }

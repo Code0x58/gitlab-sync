@@ -64,7 +64,8 @@ schema = Schema({
         ),
         Required("paths"): [gitlab_path],
         Required("strategy"): valid_strategy,
-        Optional(All("gitlab-url", Replace("-", "_"))): Url(),
+        Optional(All("gitlab-http", Replace("-", "_"))): Url(),
+        Optional(All("gitlab-git", Replace("-", "_"))): Url(),
     }
 })
 
@@ -102,7 +103,8 @@ class RunConfig:
     paths: typing.List[Path]
     access_token: str
     strategy: typing.Callable[["RunConfig"], None]
-    gitlab_url: str = "https://gitlab.com/"
+    gitlab_http: str = "https://gitlab.com/"
+    gitlab_git: str = "git+ssh://git@gitlab.com/"
 
 
 def find_and_load_config() -> typing.List[RunConfig]:
