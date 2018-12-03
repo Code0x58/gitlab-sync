@@ -79,6 +79,15 @@ class ProjectCollector(object):
     def __init__(self, config):
         self.config = config
 
+    def filter_project(self, project_info):
+        """Return True if the project is of interest."""
+        path = pathlib.Path(project_info["path_with_namespace"]).parts
+        for filter_path in self.config.paths:
+            filter_parts = filter_path.parts
+            if path[:len(filter_parts)] == filter_parts:
+                return True
+        return False
+
     async def _get_user_projects(self, user):
         projects = []
         async with self.session.get(
@@ -99,6 +108,7 @@ class ProjectCollector(object):
         return [
             Repository(self.config.base_path, project["path_with_namespace"], project["id"])
             for project in projects
+            if self.filter_project(project)
         ]
 
     async def _get_group_projects(self, group):
@@ -122,6 +132,7 @@ class ProjectCollector(object):
         return [
             Repository(self.config.base_path, project["path_with_namespace"], project["id"])
             for project in projects
+            if self.filter_project(project)
         ]
 
     async def _get_group_subgroups(self, group):
