@@ -2,11 +2,12 @@ import os
 import stat
 import subprocess
 import tempfile
+import time
 
 import requests
+from grab import Grab
 
 import pytest
-from grab import Grab
 
 
 @pytest.fixture(autouse=True)
@@ -155,13 +156,33 @@ def gitlab(docker_ip, docker_services, tmp_path_factory, pytestconfig):
             data = response.json()
             return data["id"], self.git_url + data["path_with_namespace"] + ".git"
 
+        def delete_project(self, project_id):
+            """Make a project and return (id, ssh url)."""
+            project_url = self.http_url + "api/v4/projects/%s" % project_id
+            response = self.session.delete(project_url)
+            # the delete is asynchronus so wait for it
+            response.raise_for_status()
+            for _ in range(5):
+                time.sleep(1)
+                response = self.session.get(project_url)
+                if response.status_code == 404:
+                    return
+            raise Exception("Project not deleted in time.")
+
     yield Info()
 
 
-def test_smoke(gitlab):
+def test_mirror(gitlab):
     """Check that a sync runs first time."""
     gitlab_sync = gitlab.make_runner()
-    gitlab.make_project(name="lulz")
+    project_id, _ = gitlab.make_project(name="lulz")
     gitlab_sync("local-update", check=True)
-    assert (gitlab.sync_root / gitlab.username / "lulz").is_dir()
+    project_absolute_path = gitlab.sync_root / gitlab.username / "lulz"
+    assert project_absolute_path.is_dir()
+
     gitlab_sync("local-update", check=True)
+    assert project_absolute_path.is_dir()
+
+    gitlab.delete_project(project_id)
+    gitlab_sync("local-update", check=True)
+    assert not project_absolute_path.is_dir()
