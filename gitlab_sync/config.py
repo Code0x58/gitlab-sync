@@ -15,7 +15,7 @@ import attr
 import gitlab_sync.strategy
 import toml
 from gitlab_sync import ConfigurationError
-from voluptuous import All, And, Any, Invalid, MultipleInvalid, Optional, Replace, Required, Schema, Url
+from voluptuous import All, And, Any, Boolean, Invalid, MultipleInvalid, Optional, Replace, Required, Schema, Url
 
 
 def absolute_dir_path(string) -> Path:
@@ -54,8 +54,14 @@ def valid_strategy(value: str) -> typing.Callable[["RunConfig"], None]:
     return strategy
 
 
+def strip_path_single_path(copy_config):
+    if copy_config.get("strip-path") and len(copy_config["paths"]) != 1:
+        raise Invalid("strip-path can only be used when paths has one element")
+    return copy_config
+
+
 schema = Schema({
-    Required(absolute_dir_path): {
+    Required(absolute_dir_path): All({
         Required(All("access-token", Replace("-", "_"))): And(
             Any(
                 str,
@@ -66,7 +72,8 @@ schema = Schema({
         Required("strategy"): valid_strategy,
         Optional(All("gitlab-http", Replace("-", "_"))): Url(),
         Optional(All("gitlab-git", Replace("-", "_"))): Url(),
-    }
+        Optional(All("strip-path", Replace("-", "_"))): Boolean,
+    }, strip_path_single_path),
 })
 
 
@@ -105,6 +112,7 @@ class RunConfig:
     strategy: typing.Callable[["RunConfig"], None]
     gitlab_http: str = "https://gitlab.com/"
     gitlab_git: str = "git+ssh://git@gitlab.com/"
+    strip_path: bool = False
 
 
 def find_and_load_config() -> typing.List[RunConfig]:

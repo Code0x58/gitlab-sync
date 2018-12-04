@@ -21,33 +21,37 @@ def mirror(config):
         gitlab_sync.repository.enumerate_remote(config)
     )
 
-    remoteless = [repo for repo in locals_ if repo.id is None]
+    remoteless = [repo for repo in locals_ if repo.gitlab_project_id is None]
     if remoteless:
         # TODO: subclass exceptions
         # low chance of being due to a failure between git-init and git-config
         raise Exception("Unexpected directories.")
-    local_map = {repo.id: repo for repo in locals_}
-    remote_map = {repo.id: repo for repo in remotes}
+    local_map = {repo.gitlab_project_id: repo for repo in locals_}
+    remote_map = {repo.gitlab_project_id: repo for repo in remotes}
     logger.debug("local repos found: %r", locals_)
     logger.debug("remote repos found: %r", remotes)
 
     delete_map = {}
     for id_ in local_map.keys() - remote_map.keys():
         repo = local_map.pop(id_)
-        delete_map[repo.id] = repo
+        delete_map[repo.gitlab_project_id] = repo
 
     create_map = {}
     for id_ in remote_map.keys() - local_map.keys():
         repo = remote_map.pop(id_)
-        create_map[repo.id] = repo
+        create_map[repo.gitlab_project_id] = repo
 
     move_map = {}
     for id_, local in local_map.items():
         remote = remote_map[id_]
-        if remote.gitlab_path != local.gitlab_path:
+        if local.gitlab_path and remote.gitlab_path != local.gitlab_path:
             move_map[id_] = (remote, local.gitlab_path, remote.gitlab_path)
 
-    update_map = remote_map
+    update_map = {
+        id_: gitlab_sync.repository.LocalRepository.from_remote(config, remote)
+        for id_, remote in remote_map.items()
+        if id_ not in create_map
+    }
 
     for repo in sorted(delete_map.values()):
         logger.info("deleting %s", repo)
@@ -66,6 +70,7 @@ def mirror(config):
         logger.info("cleaning %s", repo)
         gitlab_sync.operations.clean(repo)
 
-    for repo in sorted(create_map.values()):
-        logger.info("copying %s", repo)
-        gitlab_sync.operations.clone(config, repo)
+    for remote in sorted(create_map.values()):
+        logger.info("copying %s", remote)
+        local = gitlab_sync.repository.LocalRepository.from_remote(config, remote)
+        gitlab_sync.operations.clone(config, local, remote)

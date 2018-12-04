@@ -114,5 +114,6 @@ def test_find_and_load_config(tmpdir, monkeypatch):
             paths=[Path("parent1/child"), Path("parent2")],
             access_token="literal",
             strategy=gitlab_sync.strategy.mirror,
+            strip_path=False,
         ),
     }

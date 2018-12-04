@@ -1,3 +1,4 @@
+[![PyPI version](https://badge.fury.io/py/gitlab-sync.svg)](https://badge.fury.io/py/gitlab-sync)
 [![Build Status](https://travis-ci.org/Code0x58/gitlab-sync.svg?branch=master)](https://travis-ci.org/Code0x58/gitlab-sync)
 
 # gitlab-sync
@@ -15,14 +16,22 @@ which is [TOML](https://github.com/toml-lang/toml).
 
 
 ```toml
+["~/team-x"]
+access-token = "9koXpg98eAheJpvBs5tK"
+# you can see the paths of groups from the URL on GitLab
+paths = [ "path/to/team-x" ]
+# strip the common prefix from the given path
+strip-path = True
+strategy = "mirror"
+
 ["~/gitlab"]
 # get the gitlab access token from running a command
 access-token = ["pass", "GitLab/api-access-token"]
-# access-token = "plaintext token in file"
 
 # paths to clone from GitLab, can include slashes for groups/projects
 paths = [ "mintel", "obristow" ]
 strategy = "mirror"
+
 ```
 
 

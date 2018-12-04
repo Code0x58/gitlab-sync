@@ -15,14 +15,13 @@ _DEV_NULL = open(os.devnull, "r+b")
 
 
 @attr.s(auto_attribs=True)
-class Repository:
+class LocalRepository:
     base_path: pathlib.Path
-    gitlab_path: pathlib.Path
-    id: typing.Optional[int] = None
+    relative_path: pathlib.Path
 
     @property
-    def local_path(self):
-        return self.base_path / self.gitlab_path
+    def absolute_path(self):
+        return self.base_path / self.relative_path
 
     def git(self, *git_args, **run_kwargs):
         """Run a command in git using `subprocess.run` where `check=True` by default."""
@@ -30,19 +29,97 @@ class Repository:
         if not gitlab_sync.tee_git:
             run_kwargs.setdefault("stdout", _DEV_NULL)
             run_kwargs.setdefault("stderr", _DEV_NULL)
-        command = ["git", "-C", str(self.local_path)] + list(git_args)
+        command = ["git", "-C", str(self.absolute_path)] + list(git_args)
         return subprocess.run(command, **run_kwargs)
 
-    def __str__(self):
-        return str(self.local_path)
+    def _get_gitlab_project_id(self):
+        if not hasattr(self, "_gitlab_project_id"):
+            result = self.git(
+                "config",
+                "--local",
+                "gitlab-sync.project-id",
+                stdout=subprocess.PIPE,
+                universal_newlines=True,
+                check=False,
+            )
+            if result.returncode:
+                self._gitlab_project_id = None
+            else:
+                self._gitlab_project_id = int(result.stdout.rstrip())
+        return self._gitlab_project_id
 
-    def __repr__(self):
-        return "Repository({!r}, {!r}, {!r}))".format(
-            str(self.base_path), str(self.gitlab_path), self.id
+    def _set_gitlab_project_id(self, value):
+        self.git(
+            "config",
+            "--local",
+            "gitlab-sync.project-id",
+            str(value),
         )
+        self._gitlab_project_id = value
+
+    def _get_gitlab_path(self):
+        if not hasattr(self, "_gitlab_path"):
+            result = self.git(
+                "config",
+                "--local",
+                "gitlab-sync.gitlab-path",
+                stdout=subprocess.PIPE,
+                universal_newlines=True,
+                check=False,
+            )
+            if result.returncode:
+                self._gitlab_path = None
+            else:
+                self._gitlab_path = pathlib.Path(result.stdout.rstrip())
+        return self._gitlab_path
+
+    def _set_gitlab_path(self, value):
+        self.git(
+            "config",
+            "--local",
+            "gitlab-sync.gitlab-path",
+            str(value),
+        )
+        self._gitlab_path = value
+
+    gitlab_project_id = property(_get_gitlab_project_id, _set_gitlab_project_id)
+    gitlab_path = property(_get_gitlab_path, _set_gitlab_path)
+
+    def __str__(self):
+        return str(self.gitlab_path)
 
     def __gt__(self, other):
-        return self.local_path > other.local_path
+        return self.absolute_path > other.absolute_path
+
+    @classmethod
+    def from_remote(cls, config, remote):
+        """Return an instance suitable for cloning into."""
+        if config.strip_path:
+            relative_path = remote.gitlab_path.relative_to(config.paths[0])
+        else:
+            relative_path = remote.gitlab_path
+        instance = cls(config.base_path, relative_path)
+        instance._gitlab_path = remote.gitlab_path
+        return instance
+
+
+@attr.s(auto_attribs=True)
+class GitlabRepository:
+    gitlab_path: pathlib.Path
+    gitlab_project_id: typing.Optional[int] = None
+
+    def __str__(self):
+        return str(self.gitlab_path)
+
+    def __gt__(self, other):
+        return self.gitlab_path > other.gitlab_path
+
+
+@attr.s(auto_attribs=True)
+class RemoteRepository:
+    relative_path: pathlib.Path
+    absolute_path: pathlib.Path
+    gitlab_project_id: typing.Optional[int] = None
 
 
 def enumerate_local(base_path):
@@ -51,17 +128,8 @@ def enumerate_local(base_path):
         if ".git" not in dirs:
             continue
         del dirs[:]
-        gitlab_path = pathlib.Path(root).relative_to(base_path)
-        repo = Repository(base_path, gitlab_path)
-        result = repo.git(
-            "config",
-            "--local",
-            "gitlab-sync.project-id",
-            stdout=subprocess.PIPE,
-            universal_newlines=True,
-        )
-        if not result.returncode:
-            repo.id = int(result.stdout.rstrip())
+        store_path = pathlib.Path(root).relative_to(base_path)
+        repo = LocalRepository(base_path, store_path)
         yield repo
 
 
@@ -79,14 +147,20 @@ class ProjectCollector(object):
     def __init__(self, config):
         self.config = config
 
-    def filter_project(self, project_info):
-        """Return True if the project is of interest."""
-        path = pathlib.Path(project_info["path_with_namespace"]).parts
-        for filter_path in self.config.paths:
-            filter_parts = filter_path.parts
-            if path[:len(filter_parts)] == filter_parts:
-                return True
-        return False
+    def filter_projects(self, projects):
+        """Yield repository objects for projects of interest."""
+        for project in projects:
+            path = pathlib.Path(project["path_with_namespace"]).parts
+            for filter_path in self.config.paths:
+                filter_parts = filter_path.parts
+                if path[:len(filter_parts)] == filter_parts:
+                    yield GitlabRepository(pathlib.Path(project["path_with_namespace"]), project["id"])
+                    break
+            else:
+                gitlab_sync.logger.debug(
+                    "Skipping %s as it does not match a filter path",
+                    project["path_with_namespace"],
+                )
 
     async def _get_user_projects(self, user):
         projects = []
@@ -105,11 +179,7 @@ class ProjectCollector(object):
                 projects.extend(await response.json())
                 next_page = response.headers.get("X-Next-Page")
 
-        return [
-            Repository(self.config.base_path, project["path_with_namespace"], project["id"])
-            for project in projects
-            if self.filter_project(project)
-        ]
+        return self.filter_projects(projects)
 
     async def _get_group_projects(self, group):
         projects = []
@@ -129,11 +199,7 @@ class ProjectCollector(object):
                 projects.extend(await response.json())
                 next_page = response.headers.get("X-Next-Page")
 
-        return [
-            Repository(self.config.base_path, project["path_with_namespace"], project["id"])
-            for project in projects
-            if self.filter_project(project)
-        ]
+        return self.filter_projects(projects)
 
     async def _get_group_subgroups(self, group):
         """Yields a (sub)group names/ids"""
