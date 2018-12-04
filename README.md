@@ -21,7 +21,7 @@ access-token = "9koXpg98eAheJpvBs5tK"
 # you can see the paths of groups from the URL on GitLab
 paths = [ "path/to/team-x" ]
 # strip the common prefix from the given path
-strip-path = True
+strip-path = true
 strategy = "mirror"
 
 ["~/gitlab"]
