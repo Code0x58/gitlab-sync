@@ -5,11 +5,96 @@ little if/else handling as possible, with lower level methods having 0
 knowledge of their use.
 
 """
+import abc
+import enum
 import shutil
 
+import attr
 import gitlab_sync.operations
 import gitlab_sync.repository
 from gitlab_sync import logger
+
+# there is a filesytem and git level sync
+# filesystem level handles things like creates/deletes/moves
+# git level sync does merges
+# example commands
+# gitlab-sync mirror --filesystem-only|--git-only
+# gitlab-sync sync --filesystem-only|--git-only
+
+
+class GitlabSyncException(Exception):
+    """Base exception for gitlab-sync exceptions."""
+
+
+class StateError(GitlabSyncException):
+    """Raised when a strategy cannot be applied due to an invalid state."""
+
+
+@attr.s(auto_attribs=True)
+class FilestemSyncState:
+    create_local: int
+    create_remote: int
+    create_conflict: int
+    move_local: int
+    move_remote: int
+    move_conflict: int
+    delete_local: int
+    delete_remote: int
+
+
+class GitSyncState(enum.Enum):
+    fast_forward_local = enum.auto()
+    fast_forward_remote = enum.auto()
+    conflict = enum.auto()
+    merge_local = enum.auto()
+    merge_remote = enum.auto()
+
+
+def run_for_config(context, config):
+    """Method to call from the CLI to apply a config."""
+    # TODO: get the repo pairs
+    # TODO: put all of these in an object/named-tuple so easier to pass
+    filesystem_state = FilestemSyncState()
+    if not context.git_only:
+        config.strategy.apply_filesystem(filesystem_state)
+    git_state = GitSyncState()
+    if not context.filesystem_only:
+        config.strategy.apply_git(git_state)
+
+
+class Strategy(abc.ABC):
+    """Abstract class for processing states."""
+
+    def __init__(self, config):
+        self.config = config
+
+    @abc.abstractmethod
+    def apply_filesystem(self, state: FilestemSyncState) -> None:
+        pass
+
+    # this only uses enum_local if --git-only, otherwise assumes resolved sync
+    @abc.abstractmethod
+    def apply_git(self, branch: str, state: GitSyncState) -> None:
+        pass
+
+
+class MirrorStrategy(Strategy):
+    """Assume changes only happen remotely."""
+
+    def apply_filesystem(self, state: FilestemSyncState) -> None:
+        disallowed_states = (
+            state.create_remote +
+            state.create_conflict +
+            state.move_remote +
+            state.move_conflict +
+            state.delete_remote
+        )
+        if disallowed_states:
+            # TODO: include list of repos
+            raise StateError("Local changes were made which are incompatiable with this strategy.")
+
+    def apply_git(self, state: GitSyncState) -> None:
+        disallowed_states = ()
 
 
 # XXX: it may be good to generate the maps in a helper method
