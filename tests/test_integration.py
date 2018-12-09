@@ -24,8 +24,8 @@ def docker_compose_file(pytestconfig):
     return os.path.join(str(pytestconfig.rootdir), "tests", "docker-compose.yml")
 
 
-@pytest.fixture(scope="session")
-def gitlab(docker_ip, docker_services, tmp_path_factory, pytestconfig):
+@pytest.fixture(scope="function")
+def gitlab(docker_ip, docker_services, tmp_path_factory, pytestconfig, tmpdir):
     """Manage a GitLab instance and return an object which can interact with it."""
     http_url = "http://%s:%s/" % (docker_ip, docker_services.port_for("gitlab", 80))
     git_url = "git+ssh://git@%s:%s/" % (docker_ip, docker_services.port_for("gitlab", 22))
@@ -154,7 +154,28 @@ def gitlab(docker_ip, docker_services, tmp_path_factory, pytestconfig):
             )
             response.raise_for_status()
             data = response.json()
-            return data["id"], self.git_url + data["path_with_namespace"] + ".git"
+
+            path = data["path_with_namespace"]
+            testing_project_path = tmpdir / path
+            testing_project_path.ensure(dir=True)
+
+            class TestRepo:
+                def __init__(self, path, remote):
+                    self.path = path
+                    self.remote = remote
+                    self.git("init", ".")
+                    self.git("remote", "add", "origin", remote)
+                    self.git("config", "--local", "user.email", "tester@example.com")
+                    self.git("config", "--local", "user.name", "Tester")
+
+                def git(self, *args, **kwargs):
+                    kwargs.setdefault("check", True)
+                    kwargs.setdefault("universal_newlines", True)
+                    return subprocess.run(["git", "-C", str(self.path), *args], **kwargs)
+
+            repo = TestRepo(testing_project_path, self.git_url + data["path_with_namespace"] + ".git")
+
+            return data["id"], repo
 
         def delete_project(self, project_id):
             """Make a project and return (id, ssh url)."""
@@ -172,17 +193,34 @@ def gitlab(docker_ip, docker_services, tmp_path_factory, pytestconfig):
     yield Info()
 
 
-def test_mirror(gitlab):
+def test_mirror(gitlab, tmp_path_factory):
     """Check that a sync runs first time."""
     gitlab_sync = gitlab.make_runner()
-    project_id, _ = gitlab.make_project(name="lulz")
+    project_id, repo = gitlab.make_project(name="lulz")
+
+    # make sure empty repositories work
     gitlab_sync("local-update", check=True)
     project_absolute_path = gitlab.sync_root / gitlab.username / "lulz"
     assert project_absolute_path.is_dir()
 
+    # one file
+    repo.git("init", ".")
+    (repo.path / "README.md").write_text("Hello", "UTF8")
+    repo.git("add", "README.md")
+    repo.git("commit", "--message=Initial commit")
+    repo.git("push", "--set-upstream", "origin", "master")
+    gitlab_sync("local-update", check=True)
+    assert (project_absolute_path / "README.md").is_file()
+
+    # remote the file
+    repo.git("rm", "README.md")
+    repo.git("commit", "--message=Remote README.md")
+    repo.git("push")
     gitlab_sync("local-update", check=True)
     assert project_absolute_path.is_dir()
+    assert not (project_absolute_path / "README.md").is_file()
 
+    # remote the project
     gitlab.delete_project(project_id)
     gitlab_sync("local-update", check=True)
     assert not project_absolute_path.is_dir()

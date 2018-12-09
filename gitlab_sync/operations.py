@@ -28,7 +28,7 @@ def update_local(local):
     """Update master from the remote."""
     local.git("fetch")
     # get refs/remotes/origin/HEAD
-    issue = local.git(
+    result = local.git(
         "remote",
         "set-head",
         "origin",
@@ -36,8 +36,9 @@ def update_local(local):
         check=False,
         stderr=subprocess.PIPE,
         universal_newlines=True,
-    ).stderr.rstrip()
-    if not issue:
+    )
+    issue = result.stderr.rstrip()
+    if not result.returncode:
         # read which branch the remote HEAD points to
         remote_head = local.git(
             "symbolic-ref",
@@ -46,24 +47,30 @@ def update_local(local):
             universal_newlines=True,
         ).stdout.rstrip()
         # checkout and track the branch that the remote HEAD points to
-        issue = local.git(
+        result = local.git(
             "checkout",
             "--track",
             remote_head,
             check=False,
             stderr=subprocess.PIPE,
             universal_newlines=True,
-        ).stdout
-        if issue:
+        )
+        if result.returncode:
+            issue = result.stderr
             # if the branch is already tracked, then just check out the tip of it
-            if issue.startswith("fatal: a branch"):
-                local.git("checkout", remote_head.rpartition("/")[2])
+            name = remote_head.rpartition("/")[2]
+            if issue.startswith(r"fatal: A branch named '%s' already exists." % name):
+                local.git("reset", "--hard", remote_head)
             else:
                 raise Exception(issue.rstrip())
+        else:
+            logger.debug("`git checkout --track %s` worked", remote_head)
     elif issue.endswith("error: Cannot determine remote HEAD"):
         logger.debug("%s is an empty project", local)
     else:
         raise Exception(issue)
+    # mirror only logic
+    local.git("clean", "-d", "--force")
 
 
 def delete_local(repo):

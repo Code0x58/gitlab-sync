@@ -60,3 +60,4 @@ The local copies should not be modified by users.
 ## To do
  * flesh out integration tests
  * cater for new repositories being made locally and pushed remotely
+ * compare (toasted-)marshmallow as a replacement for attr+voluptious - marshmallow uses attr
