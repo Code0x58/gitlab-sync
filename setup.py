@@ -16,6 +16,7 @@ setup(
     use_scm_version=True,
     install_requires=["aiohttp", "click", "toml", "voluptuous"],
     long_description=long_description,
+    long_description_content_type="text/markdown",
     description="synchronise GitLab repositories",
     setup_requires=["setuptools_scm", "wheel", "pytest-runner", "attrs"],
     tests_require=TEST_REQUIRES,
