@@ -58,6 +58,13 @@ The local copies should not be modified by users.
 
 
 ## To do
+ * separate out packages so it's clear where things are coming from
+ * use Gitlab/Service interface to get remote repos and classify for ops
+ * look up reccomended repo structure, maybe move code into pkg/
  * flesh out integration tests
  * cater for new repositories being made locally and pushed remotely
- * compare (toasted-)marshmallow as a replacement for attr+voluptious - marshmallow uses attr
+ * document/give example of extending for a new service provider
+
+## Extension
+
+Consider other service providers such as GitHub, gogs, then call just git-sync and propose for git packages?
