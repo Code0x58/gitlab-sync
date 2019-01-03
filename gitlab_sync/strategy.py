@@ -64,13 +64,13 @@ def mirror(config):
         logger.info("moving %s to %s", old_gitlab_path, new_gitlab_path)
         shutil.move(str(config.base_path / old_gitlab_path), str(config.base_path / new_gitlab_path))
 
+    for remote in sorted(create_map.values()):
+        logger.info("copying %s", remote)
+        local = gitlab_sync.repository.LocalRepository.from_remote(config, remote)
+        gitlab_sync.operations.clone(config, local, remote)
+
     for repo in sorted(update_map.values()):
         logger.info("updating %s", repo)
         gitlab_sync.operations.update_local(repo)
         logger.info("cleaning %s", repo)
         gitlab_sync.operations.clean(repo)
-
-    for remote in sorted(create_map.values()):
-        logger.info("copying %s", remote)
-        local = gitlab_sync.repository.LocalRepository.from_remote(config, remote)
-        gitlab_sync.operations.clone(config, local, remote)
