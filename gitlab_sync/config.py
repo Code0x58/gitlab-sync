@@ -111,7 +111,7 @@ class RunConfig:
     access_token: str
     strategy: typing.Callable[["RunConfig"], None]
     gitlab_http: str = "https://gitlab.com/"
-    gitlab_git: str = "git+ssh://git@gitlab.com/"
+    gitlab_git: str = "ssh://git@gitlab.com/"
     strip_path: bool = False
 
 
