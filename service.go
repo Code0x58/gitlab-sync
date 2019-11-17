@@ -2,17 +2,18 @@ package gitlabsync
 
 import (
 	"fmt"
-	gitlab_client "github.com/xanzy/go-gitlab"
 	"regexp"
 	"strings"
 	"sync"
+
+	gitlab_client "github.com/xanzy/go-gitlab"
 )
 
 type Service interface {
-	RemoteRepos() ([]*remoteRepo, error)
-	CreateRepo(*localRepo) error
-	DeleteRepo(*remoteRepo) error
-	RenameRepo(*remoteRepo, string) error
+	RemoteRepos() ([]*remoteRepoInfo, error)
+	CreateRepo(*remoteRepoInfo) error
+	DeleteRepo(*remoteRepoInfo) error
+	RenameRepo(*remoteRepoInfo, string) error
 }
 
 type Gitlab struct {
@@ -21,6 +22,7 @@ type Gitlab struct {
 	pathConfig *PathConfig
 }
 
+// TODO(obristow): review. if only have RemoteRepos method, then this can avoid the struct
 func NewGitlab(u *UserConfig, c *PathConfig) (*Gitlab, error) {
 	client := gitlab_client.NewClient(nil, c.AccessToken)
 	err := client.SetBaseURL(c.APIURL)
@@ -30,12 +32,12 @@ func NewGitlab(u *UserConfig, c *PathConfig) (*Gitlab, error) {
 	return &Gitlab{client, u, c}, nil
 }
 
-func (s *Gitlab) RemoteRepos() ([]*remoteRepo, error) {
+func (s *Gitlab) RemoteRepos() ([]*remoteRepoInfo, error) {
 	WORKERS := 4
 	pat := regexp.MustCompile(fmt.Sprintf("%s(?:/|$)", strings.Join(s.pathConfig.RemotePaths, "|")))
 	totalPages := 1
 	errors := make(chan error)
-	var allRepos []*remoteRepo
+	var allRepos []*remoteRepoInfo
 	updateMutex := sync.Mutex{}
 	finished := make(chan *interface{})
 
@@ -58,12 +60,12 @@ func (s *Gitlab) RemoteRepos() ([]*remoteRepo, error) {
 					errors <- err
 					return
 				}
-				var pageRepos []*remoteRepo
+				var pageRepos []*remoteRepoInfo
 				for _, p := range ps {
 					if pat.MatchString(p.PathWithNamespace) {
-						pageRepos = append(pageRepos, &remoteRepo{
-							Path: p.PathWithNamespace,
-							Id:   fmt.Sprintf("%d", p.ID),
+						pageRepos = append(pageRepos, &remoteRepoInfo{
+							AbsolutePath: p.PathWithNamespace,
+							Id:           fmt.Sprintf("%d", p.ID),
 						})
 					}
 				}
@@ -91,33 +93,36 @@ func (s *Gitlab) RemoteRepos() ([]*remoteRepo, error) {
 	}
 }
 
-func (s *Gitlab) CreateRepo(l *localRepo) error {
-	sep := strings.LastIndex(l.CurrentRelativePath, "/")
-	namespace, _, err := s.client.Namespaces.GetNamespace(l.CurrentRelativePath[:sep])
+// TODO(obristow): review. delete (leaving remote as source of repos)
+func (s *Gitlab) CreateRepo(l *remoteRepoInfo) error {
+	sep := strings.LastIndex(l.AbsolutePath, "/")
+	namespace, _, err := s.client.Namespaces.GetNamespace(l.AbsolutePath[:sep])
 	if err == nil {
 		_, _, err = s.client.Projects.CreateProject(&gitlab_client.CreateProjectOptions{
-			Name:        gitlab_client.String(l.CurrentRelativePath[sep+1:]),
+			Name:        gitlab_client.String(l.AbsolutePath[sep+1:]),
 			NamespaceID: gitlab_client.Int(namespace.ID),
 		})
 	}
 	return err
 }
 
-func (s *Gitlab) DeleteRepo(r *remoteRepo) error {
-	_, err := s.client.Projects.DeleteProject(r.Path)
+// TODO(obristow): review. delete (leaving remote as source of repos)
+func (s *Gitlab) DeleteRepo(r *remoteRepoInfo) error {
+	_, err := s.client.Projects.DeleteProject(r.AbsolutePath)
 	return err
 }
 
-func (s *Gitlab) RenameRepo(r *remoteRepo, path string) error {
+// TODO(obristow): review. delete (leaving remote as source of repos)
+func (s *Gitlab) RenameRepo(r *remoteRepoInfo, path string) error {
 	sep := strings.LastIndex(path, "/")
 	namespace, _, err := s.client.Namespaces.GetNamespace(path[:sep])
 	name := path[sep+1:]
 	if err == nil {
-		_, _, err = s.client.Projects.EditProject(r.Path, &gitlab_client.EditProjectOptions{
+		_, _, err = s.client.Projects.EditProject(r.AbsolutePath, &gitlab_client.EditProjectOptions{
 			Name:        gitlab_client.String(name),
 			NamespaceID: gitlab_client.Int(namespace.ID),
 		})
 	}
-	r.Path = path
+	r.AbsolutePath = path
 	return err
 }

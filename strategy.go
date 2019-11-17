@@ -6,17 +6,17 @@ import (
 
 type SyncRun struct {
 	id         int
-	userConfig *UserConfig
-	pathConfig *PathConfig
+	UserConfig *UserConfig
+	PathConfig *PathConfig
 }
 
 type repoPair struct {
-	local  *localRepo
-	remote *remoteRepo
+	local  *localRepoInfo
+	remote *remoteRepoInfo
 }
 
 // really a sync/strat thing, and put it in there rather than on localRepo, really inside a loop once
-func branchSyncInfo(l *localRepo, branch string) (ahead uint, behind uint, err error) {
+func branchSyncInfo(l *localRepoInfo, branch string) (ahead uint, behind uint, err error) {
 	// could have error like non-common history
 	// git rev-list --left-right --count {local}..{remote}
 	return
@@ -26,38 +26,39 @@ func branchSyncInfo(l *localRepo, branch string) (ahead uint, behind uint, err e
 type metaSyncPlan struct {
 	// need pair
 	DeleteResolve []repoPair // can't happen as remote deltes not detectable
-	DeleteLocal   []*localRepo
-	DeleteRemote  []*remoteRepo // Not currently detectable
+	DeleteLocal   []*localRepoInfo
+	DeleteRemote  []*remoteRepoInfo // Not currently detectable
 	// need pair
 	RenameResolve []repoPair
 	RenameLocal   []repoPair
 	RenameRemote  []repoPair
 	// need pair
 	CreateResolve []repoPair
-	CreateRemote  []*localRepo
-	CreateLocal   []*remoteRepo
+	CreateRemote  []*localRepoInfo
+	CreateLocal   []*remoteRepoInfo
 }
 
 // separated out for ease of testing
-func newMetaSyncPlan(locals []localRepo, remotes []remoteRepo) (plan metaSyncPlan) {
+func newMetaSyncPlan(locals []localRepoInfo, remotes []remoteRepoInfo) (plan metaSyncPlan) {
 	pairs := make(map[string]repoPair)
 	// work out what has to be created+deleted, and find pairs
 	{
-		localMap := make(map[string]*localRepo)
-		createRemote := make(map[string]*localRepo)
+		localMap := make(map[string]*localRepoInfo)
+		createRemote := make(map[string]*localRepoInfo)
 		for _, local := range locals {
-			if len(local.RemoteId) != 0 {
-				localMap[local.RemoteId] = &local
+			if len(local.Id) != 0 {
+				localMap[local.Id] = &local
 			} else {
-				createRemote[local.CurrentRelativePath] = &local
+				// FIXME: this is miles off because ...
+				createRemote[local.RelativePath] = &local
 			}
 		}
 		for _, remote := range remotes {
 			local, exists := localMap[remote.Id]
 			if !exists {
-				if local, exists = createRemote[remote.Path]; exists {
+				if local, exists = createRemote[remote.AbsolutePath]; exists {
 					plan.CreateResolve = append(plan.CreateResolve, repoPair{local, &remote})
-					delete(createRemote, remote.Path)
+					delete(createRemote, remote.AbsolutePath)
 				} else {
 					plan.CreateLocal = append(plan.CreateLocal, &remote)
 				}
@@ -77,10 +78,11 @@ func newMetaSyncPlan(locals []localRepo, remotes []remoteRepo) (plan metaSyncPla
 	}
 	// work out renames
 	for _, pair := range pairs {
-		if pair.local.CurrentRelativePath != pair.remote.Path {
-			if pair.local.storedRelativePath == pair.remote.Path {
+		// FIXME(obristow): slammed the shit out of these branches just to compile
+		if pair.local.AbsolutePath != pair.remote.AbsolutePath {
+			if pair.local.AbsolutePath == pair.remote.AbsolutePath {
 				plan.RenameRemote = append(plan.RenameRemote, pair)
-			} else if pair.local.storedRelativePath == pair.local.CurrentRelativePath {
+			} else if pair.local.AbsolutePath == pair.local.AbsolutePath {
 				plan.RenameLocal = append(plan.RenameLocal, pair)
 			} else {
 				plan.RenameResolve = append(plan.RenameResolve, pair)
@@ -94,7 +96,7 @@ func newMetaSyncPlan(locals []localRepo, remotes []remoteRepo) (plan metaSyncPla
 // probably want to roll use of SyncRun into plan, e.g. make plan return a struct
 // that a strategy can use
 func newMetaSyncPlanz(s *SyncRun) {
-	service, err := NewGitlab(s.userConfig, s.pathConfig)
+	service, err := NewGitlab(s.UserConfig, s.PathConfig)
 	if err != nil {
 		panic(err)
 	}

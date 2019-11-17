@@ -14,6 +14,7 @@ import (
 
 type UserConfig struct {
 	// naming of the last two should be improvable
+	// probably want a semaphore here for work limits (like hitting GitLab)
 	PathConfigs               []PathConfig `toml:"path-config"`
 	MaxParallelSyncs          uint         `toml:"max-parallel-syncs"`
 	MaxParallelSyncOperations uint         `toml:"max-parallel-sync-operationns"`

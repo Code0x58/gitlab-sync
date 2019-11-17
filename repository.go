@@ -4,89 +4,117 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 )
 
-type localRepo struct {
-	BasePath            string // base path on local system
-	CurrentRelativePath string // current relative path on local system
-	storedRelativePath  string // previous relative path on local system
-	RemoteId            string // id of project in the remote service
+// TODO: make an interface for
+// could use this with an interface like Get and Set
+// then again, if this + remote are an interface, then localRepoInfo could be used in the generic methods like "Service.Create(local)" or CreateLocal(remote, config)
+type localRepoInfo struct {
+	// could be BasePath, e.g. /usr/obristow/code/, or git://git.github.com/
+	localPath    string // path in filesystem - don't need more assuming users never move local directories relative to their base?
+	Id           string `json:"id"`            // project Id
+	AbsolutePath string `json:"absolute-path"` // e.g. org/group/project
+	RelativePath string `json:"relative-path"` // e.g. group/project
+	// strategy could be inferred from the status of each repo, like "canonical" or "source", "downstream"
+	Strategy string `json:"strategy"` // this would imply both can record/report a stragegy; providers chould set the strat, e.g. from local system config
 }
 
-type remoteRepo struct {
-	Path string // path of the repo in service
-	Id   string // id of project in service
+func LoadLocalRepo(path string) (l *localRepoInfo, err error) {
+	// load a configured repo from the local filesystem
+	l.localPath = path
+	// TODO: get exceptions
+	l.Id = l.config("id")
+	l.AbsolutePath = l.config("absolute-path")
+	l.RelativePath = l.config("relative-path")
+	l.Strategy = l.config("strategy")
+	return
 }
 
 // Run a git command on the local repository
-func (l *localRepo) git(args ...string) *exec.Cmd {
-	path := filepath.Join(l.BasePath, l.CurrentRelativePath)
+func (l *localRepoInfo) git(args ...string) *exec.Cmd {
 	all_args := make([]string, len(args)+3)
 	all_args[0] = "git"
 	all_args[1] = "-C"
-	all_args[2] = path
+	all_args[2] = l.localPath
 	copy(all_args[3:], args)
 	return exec.Command("git", all_args...)
 }
 
 // Get a config item from the local repository, or an empty string
-func (l *localRepo) config(name string) string {
-	item := fmt.Sprintf("gitlab-sync.%s", name)
+func (l *localRepoInfo) config(name string) string {
+	item := fmt.Sprintf("git-sync.%s", name)
 	out, _ := l.git("config", "--local", item).Output()
 	return string(out)
 }
 
-func (l *localRepo) setConfig(name string, value string) error {
-	item := fmt.Sprintf("gitlab-sync.%s", name)
-	_, err := l.git("config", "--local", item, value).Output()
+func (l *localRepoInfo) setConfig(name string, value string) (err error) {
+	item := fmt.Sprintf("git-sync.%s", name)
+	_, err = l.git("config", "--local", item, value).Output()
 	// TODO(obristow): think about a panic in this situation
-	return err
+	return
 }
 
-// Return the relative path that was last seen
-func (l *localRepo) StoredRelativePath() string {
-	if len(l.storedRelativePath) == 0 {
-		l.storedRelativePath = l.config("relative-path")
+func (l *localRepoInfo) save() {
+	// TODO: return error or panic on failure
+	l.setConfig("id", l.Id)
+	l.setConfig("absolute-path", l.AbsolutePath) // can infer from base+prefix rules + path
+	l.setConfig("relative-path", l.RelativePath) // path - base
+	l.setConfig("strategy", l.Strategy)
+}
+
+// TODO: think about converting this to an interface so different providers can do it in their own package?
+//  probably not much point as have to compile into code
+type remoteRepoInfo struct {
+	Id           string `json:"id"`
+	AbsolutePath string `json:"absolute-path"`
+}
+
+func relativePath(path, prefix string) (p string, err error) {
+	// return the path relative to the given prefix, or an error if it does not start with the prefix
+	failure := fmt.Errorf("No common prefix!")
+	for i := range prefix {
+		if path[i] != prefix[i] {
+			err = failure
+		}
 	}
-	return l.storedRelativePath
+	if len(prefix) == len(path) {
+		p = ""
+	} else if path[len(prefix)] == '/' {
+		p = path[len(prefix)+1:]
+	} else {
+		err = failure
+	}
+	return
 }
 
-// create the local repository
-func (l *localRepo) Create() error {
-	_, err := l.git("init", ".").Output()
+func (r *remoteRepoInfo) RelativePath(prefix string) (path string, err error) {
+	// return the path relative to the given prefix, or an error if it does not start with the prefix
+	return relativePath(r.AbsolutePath, prefix)
+}
+
+func NewLocalRepo(base string, r *remoteRepoInfo, strip string) (l *localRepoInfo, err error) {
+	// return a local repo
+	localRelative, err := relativePath(r.AbsolutePath, strip)
 	if err != nil {
-		return err
+		return
 	}
-	l.setConfig("relative-path", l.CurrentRelativePath)
-	l.setConfig("remote-id", l.RemoteId)
-	return nil
-}
-
-// rename the local repository
-func (l *localRepo) Rename(relativePath string) error {
-	// TODO(obristow): move to the given relative path
-	/*
-		out, err := l.git("init", ".").Output()
-		l.CurrentRelativePath = relativePath
-		l.setConfig("relative-path", relativePath)
-	*/
-	return nil
-}
-
-func loadLocalRepo(config *PathConfig, path string) (*localRepo, error) {
-	currentRelativePath, _ := filepath.Rel(config.BasePath, path)
-
-	l := &localRepo{
-		BasePath:            config.BasePath,
-		CurrentRelativePath: currentRelativePath,
+	l.localPath = path.Join(base, localRelative)
+	l.Id = r.Id
+	l.AbsolutePath = r.AbsolutePath
+	l.RelativePath = localRelative
+	l.Strategy = "mirror"
+	err = l.git("init", ".").Run()
+	if err != nil {
+		err = fmt.Errorf("Unable to create new repository at %s for %s: %s", l.localPath, l.AbsolutePath, err)
+		return nil, err
 	}
-	l.StoredRelativePath()
-	l.RemoteId = l.config("remote-id")
-	return l, nil
+	l.save()
+	return
 }
 
-func LocalRepos(config *PathConfig) (repos []*localRepo, err error) {
+func LocalRepos(config *PathConfig) (repos []*localRepoInfo, err error) {
 	err = filepath.Walk(config.BasePath, func(path string, info os.FileInfo, err error) error {
 
 		if err != nil {
@@ -101,7 +129,7 @@ func LocalRepos(config *PathConfig) (repos []*localRepo, err error) {
 		}
 		if git.IsDir() {
 			path = filepath.Dir(path)
-			repo, _ := loadLocalRepo(config, path)
+			repo, _ := LoadLocalRepo(path)
 			repos = append(repos, repo)
 			return filepath.SkipDir
 		}
@@ -114,9 +142,3 @@ func LocalRepos(config *PathConfig) (repos []*localRepo, err error) {
 
 	return repos, nil
 }
-
-/*
-func RemoteRepos(config *PathConfig) []gitlabRepo {
-
-}
-*/
