@@ -15,7 +15,19 @@ import attr
 import gitlab_sync.strategy
 import toml
 from gitlab_sync import ConfigurationError
-from voluptuous import All, And, Any, Boolean, Invalid, MultipleInvalid, Optional, Replace, Required, Schema, Url
+from voluptuous import (
+    All,
+    And,
+    Any,
+    Boolean,
+    Invalid,
+    MultipleInvalid,
+    Optional,
+    Replace,
+    Required,
+    Schema,
+    Url,
+)
 
 
 def absolute_dir_path(string) -> Path:
@@ -60,21 +72,23 @@ def strip_path_single_path(copy_config):
     return copy_config
 
 
-schema = Schema({
-    Required(absolute_dir_path): All({
-        Required(All("access-token", Replace("-", "_"))): And(
-            Any(
-                str,
-                All([str]),
-            ), string_or_source,
-        ),
-        Required("paths"): [gitlab_path],
-        Required("strategy"): valid_strategy,
-        Optional(All("gitlab-http", Replace("-", "_"))): Url(),
-        Optional(All("gitlab-git", Replace("-", "_"))): Url(),
-        Optional(All("strip-path", Replace("-", "_"))): Boolean,
-    }, strip_path_single_path),
-})
+schema = Schema(
+    {
+        Required(absolute_dir_path): All(
+            {
+                Required(All("access-token", Replace("-", "_"))): And(
+                    Any(str, All([str])), string_or_source
+                ),
+                Required("paths"): [gitlab_path],
+                Required("strategy"): valid_strategy,
+                Optional(All("gitlab-http", Replace("-", "_"))): Url(),
+                Optional(All("gitlab-git", Replace("-", "_"))): Url(),
+                Optional(All("strip-path", Replace("-", "_"))): Boolean,
+            },
+            strip_path_single_path,
+        )
+    }
+)
 
 
 def find_config() -> Path:
@@ -86,7 +100,9 @@ def find_config() -> Path:
         if path.is_file():
             return path
         else:
-            raise ConfigurationError("{} given in {} is not a file".format(path, environ))
+            raise ConfigurationError(
+                "{} given in {} is not a file".format(path, environ)
+            )
     home = Path.home()
     for path in (home / ".config/gitlab-sync.toml", home / ".gitlab-sync.toml"):
         if path.is_file():
@@ -118,7 +134,4 @@ class RunConfig:
 def find_and_load_config() -> typing.List[RunConfig]:
     """Top level method to acquire config for gitlab-sync."""
     data = load_config(find_config().open())
-    return {
-        path: RunConfig(path, **settings)
-        for path, settings in data.items()
-    }
+    return {path: RunConfig(path, **settings) for path, settings in data.items()}

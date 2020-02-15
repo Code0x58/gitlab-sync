@@ -28,7 +28,10 @@ def docker_compose_file(pytestconfig):
 def gitlab(docker_ip, docker_services, tmp_path_factory, pytestconfig, tmpdir):
     """Manage a GitLab instance and return an object which can interact with it."""
     http_url = "http://%s:%s/" % (docker_ip, docker_services.port_for("gitlab", 80))
-    git_url = "git+ssh://git@%s:%s/" % (docker_ip, docker_services.port_for("gitlab", 22))
+    git_url = "git+ssh://git@%s:%s/" % (
+        docker_ip,
+        docker_services.port_for("gitlab", 22),
+    )
     sync_root = tmp_path_factory.mktemp("sync-root")
 
     def is_responsive():
@@ -148,10 +151,7 @@ def gitlab(docker_ip, docker_services, tmp_path_factory, pytestconfig, tmpdir):
         def make_project(self, **kwargs):
             """Make a project and return (id, ssh url)."""
             kwargs.setdefault("visibility", "public")
-            response = self.session.post(
-                self.http_url + "api/v4/projects",
-                json=kwargs,
-            )
+            response = self.session.post(self.http_url + "api/v4/projects", json=kwargs)
             response.raise_for_status()
             data = response.json()
 
@@ -171,9 +171,14 @@ def gitlab(docker_ip, docker_services, tmp_path_factory, pytestconfig, tmpdir):
                 def git(self, *args, **kwargs):
                     kwargs.setdefault("check", True)
                     kwargs.setdefault("universal_newlines", True)
-                    return subprocess.run(["git", "-C", str(self.path), *args], **kwargs)
+                    return subprocess.run(
+                        ["git", "-C", str(self.path), *args], **kwargs
+                    )
 
-            repo = TestRepo(testing_project_path, self.git_url + data["path_with_namespace"] + ".git")
+            repo = TestRepo(
+                testing_project_path,
+                self.git_url + data["path_with_namespace"] + ".git",
+            )
 
             return data["id"], repo
 

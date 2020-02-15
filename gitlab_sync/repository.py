@@ -49,12 +49,7 @@ class LocalRepository:
         return self._gitlab_project_id
 
     def _set_gitlab_project_id(self, value):
-        self.git(
-            "config",
-            "--local",
-            "gitlab-sync.project-id",
-            str(value),
-        )
+        self.git("config", "--local", "gitlab-sync.project-id", str(value))
         self._gitlab_project_id = value
 
     def _get_gitlab_path(self):
@@ -74,12 +69,7 @@ class LocalRepository:
         return self._gitlab_path
 
     def _set_gitlab_path(self, value):
-        self.git(
-            "config",
-            "--local",
-            "gitlab-sync.gitlab-path",
-            str(value),
-        )
+        self.git("config", "--local", "gitlab-sync.gitlab-path", str(value))
         self._gitlab_path = value
 
     gitlab_project_id = property(_get_gitlab_project_id, _set_gitlab_project_id)
@@ -153,8 +143,10 @@ class ProjectCollector(object):
             path = pathlib.Path(project["path_with_namespace"]).parts
             for filter_path in self.config.paths:
                 filter_parts = filter_path.parts
-                if path[:len(filter_parts)] == filter_parts:
-                    yield GitlabRepository(pathlib.Path(project["path_with_namespace"]), project["id"])
+                if path[: len(filter_parts)] == filter_parts:
+                    yield GitlabRepository(
+                        pathlib.Path(project["path_with_namespace"]), project["id"]
+                    )
                     break
             else:
                 gitlab_sync.logger.debug(
@@ -235,8 +227,8 @@ class ProjectCollector(object):
             projects = []
             for projects_future in asyncio.as_completed(
                 [
-                    asyncio.ensure_future(self._get_group_projects(group)) async
-                    for group in self._get_group_subgroups(entity)
+                    asyncio.ensure_future(self._get_group_projects(group))
+                    async for group in self._get_group_subgroups(entity)
                 ]
             ):
                 projects.extend(await projects_future)

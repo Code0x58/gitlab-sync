@@ -18,8 +18,7 @@ def clone(config, local, remote):
     local.gitlab_project_id = remote.gitlab_project_id
     local.gitlab_path = remote.gitlab_path
     local.git(
-        "remote", "add", "origin",
-        config.gitlab_git + "%s.git" % remote.gitlab_path,
+        "remote", "add", "origin", config.gitlab_git + "%s.git" % remote.gitlab_path
     )
     update_local(local)
 

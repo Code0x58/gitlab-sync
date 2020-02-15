@@ -17,9 +17,7 @@ def mirror(config):
     """Perform necissary actions to update a local copy using backup logic."""
     locals_ = list(gitlab_sync.repository.enumerate_local(config.base_path))
     # TODO: update paths to be namespaces in other places
-    remotes = list(
-        gitlab_sync.repository.enumerate_remote(config)
-    )
+    remotes = list(gitlab_sync.repository.enumerate_remote(config))
 
     remoteless = [repo for repo in locals_ if repo.gitlab_project_id is None]
     if remoteless:
@@ -62,7 +60,10 @@ def mirror(config):
 
     for repo, old_gitlab_path, new_gitlab_path in sorted(move_map.values()):
         logger.info("moving %s to %s", old_gitlab_path, new_gitlab_path)
-        shutil.move(str(config.base_path / old_gitlab_path), str(config.base_path / new_gitlab_path))
+        shutil.move(
+            str(config.base_path / old_gitlab_path),
+            str(config.base_path / new_gitlab_path),
+        )
 
     for remote in sorted(create_map.values()):
         logger.info("copying %s", remote)
